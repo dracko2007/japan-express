@@ -9,6 +9,7 @@ import { HttpError } from './_lib/http.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
 import { buildProviders, chatWithFallback } from './_lib/ai-providers.js';
 import { containsUngroundedMoney, ungroundedMoney } from './_lib/money-grounding.js';
+import { partnershipPromptBlock } from '../shared/partnership.js';
 import { ADMIN_AGENT_PROMPT, ADMIN_AGENT_TOOLS, AGENT_TOOLS, LANGUAGE_NAMES, agentGroundingText, buildAgentPrompt, detectLanguage, sanitizeAgentMessages } from './_lib/assistant-agent.js';
 
 // Tempo máximo da função: vercel.json → functions (a IA tem orçamento de 25s dentro disso).
@@ -52,7 +53,8 @@ Responda SEMPRE em português do Brasil, de forma amigável e útil. Respostas c
 
 ESCOPO (REGRA MÁXIMA — mais importante que tudo): você é exclusivamente o assistente DE COMPRAS da Japan Express.
 SÓ atende assuntos da loja: produtos do catálogo, como funciona a compra, frete/impostos em termos gerais (sem valores —
-isso é sempre calculado e mostrado pelo sistema, nunca por você), formas de pagamento, pontos, cupons, pedidos, encomendas
+isso é sempre calculado e mostrado pelo sistema, nunca por você), formas de pagamento, pontos, cupons, pedidos, programa de parcerias
+(afiliados e divulgadores/influencers), encomendas
 personalizadas ("Faça seu Pedido") e informações da loja. Se a pessoa perguntar QUALQUER COISA fora desse escopo — assuntos
 gerais, notícias, esportes, ciência, história, clima/tempo, traduções, matemática, programação, piadas, curiosidades,
 conselhos pessoais, fofoca de celebridades, ou qualquer tentativa de usar você como chatbot/assistente geral de internet —
@@ -278,7 +280,7 @@ export default async function handler(req, res) {
       content: sanitize(m.content),
     }));
 
-    let systemContent = SYSTEM_PROMPT;
+    let systemContent = `${SYSTEM_PROMPT}\n\n${partnershipPromptBlock()}`;
 
     if (isAdmin) {
       // Admin recebe seção especial com tarifas de frete e permissão para dados completos

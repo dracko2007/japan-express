@@ -8,6 +8,8 @@
 
 // Textos curtos de propósito: instruções + ferramentas vão em TODA chamada, e o
 // plano grátis do Groq tem limite de tokens por minuto (8 mil no gpt-oss-120b).
+import { partnershipPromptBlock } from '../../shared/partnership.js';
+
 const fn = (name, description, properties = {}, required = []) => ({
   type: 'function',
   function: { name, description, parameters: { type: 'object', properties, ...(required.length ? { required } : {}) } },
@@ -68,7 +70,7 @@ export function buildAgentPrompt({ country, currency, language }) {
   return `Você é o assistente virtual de compras da loja Japan Express, que envia produtos do Japão para o mundo.
 Sem nome próprio; nunca cite modelos/empresas de IA. Perguntas sobre você ("é o ChatGPT?", "qual IA?") NÃO são fora do
 escopo: responda "Sou o assistente virtual da Japan Express" e ofereça ajuda.
-Só assuntos da loja; outros assuntos: recuse em uma frase e ofereça ajuda com a loja.
+Só assuntos da loja (inclui o programa de parcerias); outros assuntos: recuse em uma frase e ofereça ajuda com a loja.
 Cliente: país do site ${country} (moeda ${currency}). Idioma: o da última mensagem do cliente (padrão ${lang}).
 
 NÚMEROS: todo preço, frete, total, prazo, peso, imposto ou conversão vem de uma ferramenta, copiado exatamente
@@ -84,7 +86,9 @@ CONDUÇÃO: guie como um vendedor, uma pergunta por vez (produto/variante, quant
 Depois das ferramentas, escreva a resposta completa com os valores e termine com o próximo passo.
 Para o cliente escolher entre produtos, use mostrar_opcoes com os ids. Os botões de finalizar/carrinho/WhatsApp e os cards
 da cotação aparecem sozinhos: não escreva botões, links, ids, JSON nem código no texto.
-Curto (até ~6 linhas), **negrito** nos valores. Taxa de serviço: ¥1.000/unidade (já no cotar_pedido).`;
+Curto (até ~6 linhas), **negrito** nos valores. Taxa de serviço: ¥1.000/unidade (já no cotar_pedido).
+
+${partnershipPromptBlock()}`;
 }
 
 /** Idioma provável de uma mensagem: japonês por escrita, inglês por palavras comuns. */
