@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AFFILIATE_TIERS, PARTNERSHIP_KEYWORDS, partnershipAnswer, partnershipPromptBlock } from './partnership.js';
+import { AFFILIATE_TIERS, PARTNERSHIP_KEYWORDS, partnershipAnswer, partnershipExamples, partnershipPromptBlock } from './partnership.js';
 import { agentGroundingText, buildAgentPrompt } from '../api/_lib/assistant-agent.js';
 import { ungroundedMoney } from '../api/_lib/money-grounding.js';
 
@@ -20,7 +20,7 @@ describe('programa de parcerias (assistente virtual)', () => {
     const pt = partnershipAnswer('pt');
     expect(pt).toContain('Afiliado');
     expect(pt).toContain('Divulgador');
-    expect(pt).toContain('Quero ser afiliado');
+    expect(pt).toContain('Afilie-se');
     expect(pt).toContain('Bronze 10%');
     expect(pt).toContain('Prata 15%');
     expect(pt).toContain('Ouro 20%');
@@ -51,5 +51,28 @@ describe('programa de parcerias (assistente virtual)', () => {
     // Prata sobe ao passar da meta do Bronze; Ouro ao passar da meta da Prata.
     expect(TIER_CONFIG.bronze.goalYen).toBe(AFFILIATE_TIERS.silver.aboveYen);
     expect(TIER_CONFIG.silver.goalYen).toBe(AFFILIATE_TIERS.gold.aboveYen);
+  });
+});
+
+describe('exemplos para quem pergunta "quanto eu ganho?"', () => {
+  it('trazem valores prontos, iguais aos níveis, nos 3 idiomas', () => {
+    const pt = partnershipExamples('pt');
+    // Lucro de ¥5.000 por venda: 10% = ¥500, 15% = ¥750, 20% = ¥1.000.
+    expect(pt).toContain('¥5.000');
+    expect(pt).toContain('Bronze recebe ¥500');
+    expect(pt).toContain('Prata ¥750');
+    expect(pt).toContain('Ouro ¥1.000');
+    expect(pt).toContain('¥150.000');
+    expect(pt).toContain('Prata (15%)');
+    expect(pt).toContain('Ouro (20%)');
+    expect(partnershipExamples('en')).toContain('Bronze earns ¥500, Silver ¥750 and Gold ¥1,000');
+    expect(partnershipExamples('ja')).toContain('¥750');
+  });
+
+  it('a IA é orientada a usar só esses exemplos e todos os valores passam pela trava anti-alucinação', () => {
+    const prompt = buildAgentPrompt({ country: 'Brasil', currency: 'BRL', language: 'pt' });
+    expect(prompt).toContain(partnershipExamples('pt'));
+    expect(prompt).toMatch(/NÃO crie outros valores/);
+    expect(ungroundedMoney(partnershipExamples('pt'), agentGroundingText(prompt, []))).toEqual([]);
   });
 });

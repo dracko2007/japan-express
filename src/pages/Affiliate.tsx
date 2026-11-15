@@ -7,7 +7,9 @@ import { useUser } from '@/context/UserContext';
 import { useProducts } from '@/context/ProductsContext';
 import { useToast } from '@/hooks/use-toast';
 import { affiliateService, affiliateLink, isPromoter, SITE_URL, TIER_CONFIG } from '@/services/affiliateService';
-import type { AffiliateDashboard, AffiliateReview, AffiliateTier, PromoterOrders } from '@/services/affiliateService';
+import type { AffiliateDashboard, AffiliateRequest, AffiliateReview, AffiliateTier, PromoterOrders } from '@/services/affiliateService';
+import { AFFILIATE_TIERS } from '../../shared/partnership.js';
+import { COMPANY_PROFILE } from '@/config/companyProfile';
 
 const REVIEW_STATUS: Record<AffiliateReview['status'], { label: string; className: string }> = {
   pending: { label: 'Em análise', className: 'bg-amber-100 text-amber-800' },
@@ -34,6 +36,22 @@ const AffiliatePage: React.FC = () => {
   const [purchases, setPurchases] = useState<Record<string, PromoterOrders>>({});
   const [reviewUrl, setReviewUrl] = useState<Record<string, string>>({});
   const [sendingReview, setSendingReview] = useState<string | null>(null);
+  // Pedido de afiliação (aberto a qualquer cliente; a equipe analisa e aprova).
+  const [affRequest, setAffRequest] = useState<AffiliateRequest | null>(null);
+  const [requesting, setRequesting] = useState(false);
+
+  const applyToProgram = async () => {
+    if (!user?.email) return;
+    setRequesting(true);
+    const result = await affiliateService.requestAffiliate(user.name || '', user.email);
+    setRequesting(false);
+    if (result.ok) {
+      toast({ title: 'Pedido enviado!', description: 'Nossa equipe vai analisar e te avisar por e-mail. Obrigado pelo interesse!' });
+      setAffRequest({ email: user.email.toLowerCase(), name: user.name || '', status: 'pending', requestedAt: new Date().toISOString() });
+    } else {
+      toast({ title: 'Não foi possível enviar', description: result.error, variant: 'destructive' });
+    }
+  };
 
   const sendReview = async (code: string) => {
     const url = (reviewUrl[code] || '').trim();
@@ -58,6 +76,7 @@ const AffiliatePage: React.FC = () => {
       setLoading(false);
       return;
     }
+    affiliateService.getMyRequest(user.email).then(setAffRequest);
     affiliateService.getByOwnerEmail(user.email).then(async (list) => {
       setAffiliates(list);
       if (list.some(isPromoter)) {
@@ -93,6 +112,8 @@ const AffiliatePage: React.FC = () => {
     .sort((a, b) => Number(b.active) - Number(a.active) || a.code.localeCompare(b.code));
   const affiliateCodes = affiliates.filter((aff) => !isPromoter(aff));
   const onlyPromoter = promoterCodes.length > 0 && affiliateCodes.length === 0;
+  // Sem código ainda (visitante ou cliente que não é parceiro): mostra a página "Afilie-se".
+  const signup = !isAuthenticated || (!loading && affiliates.length === 0);
   const brl = (v: number) => `R$ ${fxConvert(v || 0, 'BRL').toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
@@ -100,36 +121,83 @@ const AffiliatePage: React.FC = () => {
       <div className="gradient-hero py-16">
         <div className="container mx-auto px-4 text-center">
           <div className="inline-flex items-center gap-2 bg-primary/10 text-primary font-semibold text-sm px-4 py-1.5 rounded-full mb-4">
-            <Megaphone className="w-4 h-4" /> {onlyPromoter ? 'Programa de Divulgadores' : 'Programa de Afiliados'}
+            <Megaphone className="w-4 h-4" /> {signup ? 'Programa de Afiliados' : onlyPromoter ? 'Programa de Divulgadores' : 'Programa de Afiliados'}
           </div>
           <h1 className="font-display text-4xl lg:text-5xl font-bold text-foreground mb-3">
-            {onlyPromoter ? 'Painel do Divulgador' : 'Painel do Influencer'}
+            {signup ? 'Afilie-se' : onlyPromoter ? 'Painel do Divulgador' : 'Painel do Influencer'}
           </h1>
           <p className="text-muted-foreground text-lg">
-            {onlyPromoter ? 'Seus códigos, links e o retorno de cada divulgação' : 'Acompanhe suas indicações e comissões'}
+            {signup ? 'Divulgue a Japan Express, dê desconto aos seus seguidores e ganhe comissão por venda' : onlyPromoter ? 'Seus códigos, links e o retorno de cada divulgação' : 'Acompanhe suas indicações e comissões'}
           </p>
         </div>
       </div>
 
       <section className="py-12 bg-background">
         <div className="container mx-auto px-4 max-w-4xl">
-          {!isAuthenticated ? (
-            <div className="text-center py-16 bg-card rounded-2xl border border-border">
-              <Megaphone className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground mb-6">Entre na sua conta para ver seu painel de afiliado.</p>
-              <Button asChild className="btn-primary"><Link to="/login">Entrar</Link></Button>
+          {signup ? (
+            <div className="space-y-8">
+              <div className="grid gap-4 sm:grid-cols-3">
+                {[
+                  ['1', 'Peça sua afiliação', 'Entre na sua conta e envie o pedido. A equipe analisa e aprova.'],
+                  ['2', 'Receba seu código e link', 'Seus seguidores ganham desconto com o código e você acompanha tudo no painel.'],
+                  ['3', 'Ganhe comissão', 'A cada venda confirmada. É liberada depois que a entrega é confirmada.'],
+                ].map(([n, title, text]) => (
+                  <div key={n} className="rounded-2xl border border-border bg-card p-5">
+                    <span className="mb-3 flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">{n}</span>
+                    <h3 className="mb-1 font-semibold">{title}</h3>
+                    <p className="text-sm text-muted-foreground">{text}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-2xl border border-border bg-card p-6">
+                <h2 className="mb-1 font-display text-xl font-bold">Quanto você ganha</h2>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  A comissão é uma porcentagem do lucro líquido dos produtos de cada venda (sem frete nem taxa do Personal Shopper). Quanto mais você gera no mês, maior o nível:
+                </p>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {(['bronze', 'silver', 'gold'] as const).map((tier) => (
+                    <div key={tier} className="rounded-xl bg-secondary/50 p-4 text-center">
+                      <p className="text-2xl">{TIER_CONFIG[tier].emoji}</p>
+                      <p className="font-semibold">{TIER_CONFIG[tier].label}</p>
+                      <p className="text-3xl font-extrabold text-primary">{AFFILIATE_TIERS[tier].percent}%</p>
+                      <p className="text-xs text-muted-foreground">
+                        {AFFILIATE_TIERS[tier].aboveYen > 0 ? `lucro do mês acima de ${yen(AFFILIATE_TIERS[tier].aboveYen)}` : 'ponto de partida'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Exemplo: numa venda com {yen(5000)} de lucro nos produtos, o Bronze recebe {yen(5000 * AFFILIATE_TIERS.bronze.percent / 100)}, a Prata {yen(5000 * AFFILIATE_TIERS.silver.percent / 100)} e o Ouro {yen(5000 * AFFILIATE_TIERS.gold.percent / 100)}. O mês fecha no último dia e o nível alcançado define a porcentagem do mês seguinte.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-primary/30 bg-primary/5 p-6 text-center">
+                {!isAuthenticated ? (
+                  <>
+                    <p className="mb-4 text-muted-foreground">Entre ou crie sua conta para pedir sua afiliação.</p>
+                    <Button asChild className="btn-primary"><Link to="/login" state={{ from: '/afiliado' }}>Entrar e me afiliar</Link></Button>
+                  </>
+                ) : affRequest?.status === 'pending' ? (
+                  <p className="mx-auto max-w-md rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700">
+                    Seu pedido está em análise. A equipe vai te avisar quando aprovar.
+                  </p>
+                ) : (
+                  <>
+                    {affRequest?.status === 'rejected' && <p className="mb-3 text-sm text-muted-foreground">Seu pedido anterior não foi aprovado desta vez. Você pode pedir de novo.</p>}
+                    <Button onClick={applyToProgram} disabled={requesting} className="btn-primary gap-2">
+                      <Megaphone className="h-4 w-4" /> {requesting ? 'Enviando...' : 'Quero me afiliar'}
+                    </Button>
+                  </>
+                )}
+              </div>
+
+              <p className="text-center text-xs text-muted-foreground">
+                Divulgador (a loja envia o produto grátis e você divulga, sem comissão) é por convite: fale com a equipe pelo WhatsApp {COMPANY_PROFILE.whatsapp.domestic}.
+              </p>
             </div>
           ) : loading ? (
             <div className="text-center py-16 text-muted-foreground">Carregando...</div>
-          ) : affiliates.length === 0 ? (
-            <div className="text-center py-16 bg-card rounded-2xl border border-border">
-              <Megaphone className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-              <h2 className="font-display text-2xl font-bold mb-2">Você ainda não é afiliado</h2>
-              <p className="text-muted-foreground max-w-md mx-auto">
-                O programa de afiliados é por convite. Entre em contato com a loja para se tornar um
-                influencer parceiro e ganhar comissão divulgando seu código.
-              </p>
-            </div>
           ) : (
             <div className="space-y-6">
               {promoterCodes.length > 0 && (
