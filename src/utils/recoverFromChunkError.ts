@@ -21,11 +21,15 @@ export const isChunkLoadError = (msg: string): boolean =>
 /**
  * Limpa caches + SW e recarrega. Retorna false se já recarregou há pouco
  * (evita loop infinito); nesse caso o chamador deve apenas mostrar a tela de erro.
+ *
+ * `force`: o próprio cliente tocou em "Atualizar" — ignora a pausa anti-loop. Antes o botão
+ * "Tentar novamente" caía nessa pausa e simplesmente não fazia nada por 15 segundos, e o erro
+ * parecia permanente.
  */
-export const recoverFromChunkError = async (): Promise<boolean> => {
+export const recoverFromChunkError = async ({ force = false }: { force?: boolean } = {}): Promise<boolean> => {
   try {
     const last = Number(sessionStorage.getItem(RELOAD_KEY) || '0');
-    if (Date.now() - last < RELOAD_COOLDOWN_MS) {
+    if (!force && Date.now() - last < RELOAD_COOLDOWN_MS) {
       // Já tentamos recarregar há pouco e ainda deu erro → não entra em loop.
       return false;
     }
