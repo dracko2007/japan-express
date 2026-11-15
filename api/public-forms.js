@@ -4,6 +4,7 @@ import { adminDb } from './_lib/firebase-admin.js';
 import {
   assertExactKeys,
   escapeHtml,
+  getHeader,
   handleCors,
   HttpError,
   normalizeEmail,
@@ -14,6 +15,7 @@ import {
 } from './_lib/http.js';
 import { MAIL_REPLY_TO, sendMail, siteOrigin, unsubscribeUrl, wrapEmail } from './_lib/mailer.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
+import { bumpCount, parseDevice } from './_lib/visitor-info.js';
 import { sendPush } from './_lib/push.js';
 
 const SOURCES = new Set(['exit_intent', 'newsletter_footer', 'guide', 'cart_reminder']);
@@ -250,7 +252,7 @@ function parseEvent(body) {
   return { type, countryCode, city: optionalText(body.city, { max: 100 }) };
 }
 
-async function incrementEvent(event) {
+async function incrementEvent(event, { device = '', os = '' } = {}) {
   const db = adminDb();
   const now = new Date();
   const updatedAt = now.toISOString();
@@ -293,6 +295,9 @@ async function incrementEvent(event) {
     const previous = snap.data() || {};
     const countries = { ...(previous.countries || {}) };
     const cities = { ...(previous.cities || {}) };
+    // Aparelho e sistema vêm do navegador (servidor); nunca guarda o IP.
+    const devices = bumpCount(previous.devices, device, 10);
+    const systems = bumpCount(previous.os, os, 20);
     if (event.countryCode && (event.countryCode in countries || Object.keys(countries).length < 250)) {
       countries[event.countryCode] = boundedCounter(countries[event.countryCode]) + 1;
     }
@@ -304,6 +309,8 @@ async function incrementEvent(event) {
       total: boundedCounter(previous.total) + 1,
       countries,
       cities,
+      devices,
+      os: systems,
       updatedAt,
     });
   });
@@ -318,7 +325,7 @@ async function handleAnalytics(req, res) {
       limit: event.type === 'visit' ? 30 : 300,
       windowMs: 60 * 60 * 1000,
     });
-    await incrementEvent(event);
+    await incrementEvent(event, parseDevice(getHeader(req, 'user-agent')));
     res.status(202).json({ ok: true });
   } catch (error) {
     console.error('[analytics]', error instanceof Error ? error.message : error);

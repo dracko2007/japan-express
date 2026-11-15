@@ -10,6 +10,7 @@ import type { ConfirmationResult, RecaptchaVerifier } from 'firebase/auth';
 import { ADMIN_EMAIL, ADMIN_USER_ID, isAdminEmail } from '@/config/admin';
 import { adminService } from '@/services/adminService';
 import { referralService } from '@/services/referralService';
+import { affiliateService } from '@/services/affiliateService';
 import { trackSignUp, trackLogin } from '@/lib/analytics';
 import { sendVerificationEmail } from '@/services/mailService';
 
@@ -1086,6 +1087,9 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
         });
       }
 
+      // Chegou por um link/código de parceiro? Conta o cadastro (a sessão do novo usuário ainda está aberta).
+      await affiliateService.trackSignup();
+
       // Encerra a sessão criada durante o cadastro (login é feito depois)
       const verificationSent = await sendVerificationEmailWithFallback(normalizedEmail, userData.name);
       await firebaseSyncService.logoutUser();
@@ -1185,6 +1189,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
       if (!existingUser) {
         await hydrateSessionFromFirebaseUser(fbUser);
         devLog(`✅ [SOCIAL LOGIN] Perfil criado no primeiro acesso (${key})`);
+        void affiliateService.trackSignup();
         trackSignUp(key);
         return { success: true, error: 'new-user' };
       }

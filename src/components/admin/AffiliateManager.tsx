@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useConfirm } from '@/components/ConfirmDialog';
-import { affiliateService, affiliateLink, isPromoter, Affiliate, AffiliateKind, AffiliateReview, PendingCommission, PromoterOrders, TIER_CONFIG, AffiliateTier } from '@/services/affiliateService';
+import { affiliateService, affiliateLink, isPromoter, Affiliate, AffiliateKind, AffiliateReview, PartnerStats as PartnerStatsData, PendingCommission, PromoterOrders, TIER_CONFIG, AffiliateTier } from '@/services/affiliateService';
+import PartnerStats from '@/components/affiliate/PartnerStats';
 import { useProducts } from '@/context/ProductsContext';
 
 const EMPTY_FORM = {
@@ -69,14 +70,19 @@ const AffiliateManager: React.FC = () => {
     setForm(EMPTY_FORM);
   };
 
+  // Visitas (de onde e aparelho), cadastros e compradores por código.
+  const [codeStats, setCodeStats] = useState<Record<string, PartnerStatsData>>({});
+
   const load = async () => {
     setLoading(true);
-    const [list, pend, revs, bought] = await Promise.all([
+    const [list, pend, revs, bought, stats] = await Promise.all([
       affiliateService.getAll(),
       affiliateService.getPendingCommissions(),
       affiliateService.getAllReviews(),
       affiliateService.getPromoterOrders(true),
+      affiliateService.getCodeStats(true),
     ]);
+    if (stats) setCodeStats(stats.codes);
     setReviews(revs);
     setPurchases(bought);
     setAffiliates(list.sort((a, b) => b.totalEarnings - a.totalEarnings));
@@ -654,6 +660,12 @@ const AffiliateManager: React.FC = () => {
                             </ul>
                           </details>
                         )}
+                        {codeStats[aff.code] && (
+                          <details className="mt-4 rounded-lg border border-border px-3 py-2">
+                            <summary className="cursor-pointer text-sm font-semibold">De onde vêm as visitas, cadastros e compras</summary>
+                            <div className="mt-3"><PartnerStats stats={codeStats[aff.code]} showCities /></div>
+                          </details>
+                        )}
                         <div className="flex gap-2 mt-4">
                           <Button variant="outline" size="sm" onClick={() => startEdit(aff)} title="Editar divulgador">
                             Editar
@@ -730,6 +742,12 @@ const AffiliateManager: React.FC = () => {
                         <code className="text-xs text-foreground truncate flex-1">{affiliateLink(aff.code)}</code>
                         <button onClick={() => copyLink(aff)} className="text-xs font-semibold text-primary hover:underline shrink-0">copiar</button>
                       </div>
+                      {codeStats[aff.code] && (
+                        <details className="mt-4 rounded-lg border border-border px-3 py-2">
+                          <summary className="cursor-pointer text-sm font-semibold">De onde vêm as visitas, cadastros e compras</summary>
+                          <div className="mt-3"><PartnerStats stats={codeStats[aff.code]} showCities /></div>
+                        </details>
+                      )}
                       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm mt-4">
                         <div><p className="text-muted-foreground text-xs">Desconto</p><p className="font-semibold">{aff.discountPercent}%</p></div>
                         <div><p className="text-muted-foreground text-xs">Comissão</p><p className="font-semibold">{aff.commissionPercent}%</p></div>

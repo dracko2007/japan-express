@@ -14,6 +14,7 @@ import {
 import { enforceRateLimit } from './_lib/rate-limit.js';
 import { createHash } from 'node:crypto';
 import { oembedEndpoint, parseReviewUrl } from './_lib/review-links.js';
+import { bumpCount, mergeCounts, parseDevice, visitorGeo } from './_lib/visitor-info.js';
 
 // Validar um código diz se ele existe. Sem limite dava para testar códigos em série.
 const VALIDATE_PER_USER = 30;
@@ -163,6 +164,9 @@ async function trackVisit(req, body) {
     : { scope: 'affiliate-visit:guest', limit: VALIDATE_PER_GUEST_IP, windowMs: VALIDATE_WINDOW_MS });
 
   const db = adminDb();
+  // De onde e com que aparelho (estatística; o IP não é guardado).
+  const geo = visitorGeo(req);
+  const { device, os } = parseDevice(getHeader(req, 'user-agent'));
   const affiliateRef = db.collection('affiliates').doc(code);
   const visitRef = db.collection('affiliate_visits').doc(`${code}__${user ? `u_${user.uid}` : `v_${visitorId}`}`);
   return db.runTransaction(async (transaction) => {
@@ -173,12 +177,43 @@ async function trackVisit(req, body) {
     // O próprio dono conferindo o link não é retorno.
     const email = String(user?.email || '').trim().toLowerCase();
     if (email && email === String(data.ownerEmail || '').trim().toLowerCase()) return { counted: false };
-    transaction.set(visitRef, { code, source, createdAt: new Date().toISOString() });
+    transaction.set(visitRef, { code, source, createdAt: new Date().toISOString(), country: geo.country, region: geo.region, city: geo.city, device, os });
     const sourceField = source === 'code' ? 'codeVisits' : 'linkVisits';
+    const previous = data.visitStats || {};
     transaction.update(affiliateRef, {
       visitCount: numberOrZero(data.visitCount) + 1,
       [sourceField]: numberOrZero(data[sourceField]) + 1,
+      visitStats: {
+        countries: bumpCount(previous.countries, geo.country, 250),
+        regions: bumpCount(previous.regions, geo.country && geo.region ? `${geo.country}-${geo.region}` : '', 400),
+        cities: bumpCount(previous.cities, geo.city, 400),
+        devices: bumpCount(previous.devices, device, 10),
+        os: bumpCount(previous.os, os, 20),
+      },
     });
+    return { counted: true };
+  });
+}
+
+// Alguém criou conta depois de chegar por um código/link. Conta uma vez por conta e por código.
+// O navegador diz qual código estava ativo na sessão; aqui só entra se o código existe e está ativo.
+async function trackSignup(req, user, body) {
+  assertExactKeys(body, ['action', 'code']);
+  const code = requiredText(body.code, { max: 80, pattern: /^(?!\.\.?$)[^/]+$/ }).toUpperCase();
+  await enforceRateLimit(req, { scope: 'affiliate-signup', limit: VALIDATE_PER_USER, windowMs: VALIDATE_WINDOW_MS, identity: user.uid });
+  const db = adminDb();
+  const affiliateRef = db.collection('affiliates').doc(code);
+  const signupRef = db.collection('affiliate_signups').doc(`${code}__${user.uid}`);
+  return db.runTransaction(async (transaction) => {
+    const [affiliateSnap, signupSnap] = await Promise.all([transaction.get(affiliateRef), transaction.get(signupRef)]);
+    if (!affiliateSnap.exists || signupSnap.exists) return { counted: false };
+    const data = affiliateSnap.data() || {};
+    if (data.active !== true) return { counted: false };
+    const email = String(user.email || '').trim().toLowerCase();
+    if (email && email === String(data.ownerEmail || '').trim().toLowerCase()) return { counted: false };
+    const geo = visitorGeo(req);
+    transaction.set(signupRef, { code, uid: user.uid, createdAt: new Date().toISOString(), country: geo.country, region: geo.region });
+    transaction.update(affiliateRef, { signupCount: numberOrZero(data.signupCount) + 1 });
     return { counted: true };
   });
 }
@@ -378,6 +413,70 @@ async function promoterOrders(req, user, body) {
   return byCode;
 }
 
+// Pessoas distintas que compraram (pedido pago e não cancelado), separadas entre quem tinha
+// cadastro e quem comprou como convidado ("Comprar sem criar conta").
+export function summarizeBuyers(orders) {
+  const registered = new Set();
+  const guests = new Set();
+  let paidOrders = 0;
+  for (const order of orders) {
+    if (!countsAsPurchase(order)) continue;
+    paidOrders += 1;
+    const userId = String(order.userId || '');
+    const guest = order.customerType === 'guest' || userId.startsWith('guest_');
+    if (guest) guests.add(String(order.customerEmail || userId || order.id || '').toLowerCase());
+    else registered.add(userId || String(order.customerEmail || order.id || '').toLowerCase());
+  }
+  return { total: registered.size + guests.size, registered: registered.size, guest: guests.size, orders: paidOrders };
+}
+
+function emptyStats() {
+  return { visits: 0, linkVisits: 0, codeVisits: 0, signups: 0, buyers: { total: 0, registered: 0, guest: 0, orders: 0 },
+    countries: {}, regions: {}, cities: {}, devices: {}, os: {} };
+}
+
+// De onde vêm as visitas, quantos se cadastraram e quantos compraram (com e sem cadastro).
+// O parceiro vê os próprios códigos; o admin vê todos. Cidade só para o admin.
+async function codeStats(req, user, body) {
+  assertExactKeys(body, ['action', 'admin']);
+  const asAdmin = adminRequested(body);
+  if (asAdmin) await requireAdmin(req);
+  const db = adminDb();
+  const query = asAdmin ? db.collection('affiliates') : db.collection('affiliates').where('ownerEmail', '==', tokenEmail(user));
+  const documents = (await query.get()).docs.slice(0, 200);
+
+  const codes = {};
+  const totals = emptyStats();
+  await Promise.all(documents.map(async (document) => {
+    const data = document.data() || {};
+    const visitStats = data.visitStats || {};
+    const orders = (await db.collection('orders').where('affiliateCode', '==', document.id).get()).docs.map((order) => order.data() || {});
+    const stats = {
+      kind: affiliateKind(data),
+      visits: numberOrZero(data.visitCount),
+      linkVisits: numberOrZero(data.linkVisits),
+      codeVisits: numberOrZero(data.codeVisits),
+      signups: numberOrZero(data.signupCount),
+      buyers: summarizeBuyers(orders),
+      countries: visitStats.countries || {},
+      regions: visitStats.regions || {},
+      cities: asAdmin ? (visitStats.cities || {}) : {},
+      devices: visitStats.devices || {},
+      os: visitStats.os || {},
+    };
+    codes[document.id] = stats;
+  }));
+  for (const stats of Object.values(codes)) {
+    totals.visits += stats.visits;
+    totals.linkVisits += stats.linkVisits;
+    totals.codeVisits += stats.codeVisits;
+    totals.signups += stats.signups;
+    for (const key of ['total', 'registered', 'guest', 'orders']) totals.buyers[key] += stats.buyers[key];
+    for (const key of ['countries', 'regions', 'cities', 'devices', 'os']) totals[key] = mergeCounts(totals[key], stats[key]);
+  }
+  return { codes, totals };
+}
+
 async function adminReviews(req, body) {
   assertExactKeys(body, ['action']);
   await requireAdmin(req);
@@ -423,6 +522,14 @@ export default async function handler(req, res) {
 
     if (action === 'review-submit') {
       res.status(200).json({ review: await submitReview(req, user, body) });
+      return;
+    }
+    if (action === 'track-signup') {
+      res.status(200).json(await trackSignup(req, user, body));
+      return;
+    }
+    if (action === 'code-stats') {
+      res.status(200).json(await codeStats(req, user, body));
       return;
     }
     if (action === 'review-mine') {

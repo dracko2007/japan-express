@@ -20,6 +20,7 @@ vi.mock('@/services/affiliateService', async (importOriginal) => {
     affiliateService: {
       getByOwnerEmail: vi.fn(async () => []),
       getMyRequest: vi.fn(async () => mocks.request),
+      getCodeStats: vi.fn(async () => null),
       requestAffiliate: mocks.requestAffiliate,
     },
   };
