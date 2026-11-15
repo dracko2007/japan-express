@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Users, ShoppingBag, DollarSign, TrendingUp, Package, Calendar, Mail, Phone, Trash2, AlertTriangle, Gift, X, Sparkles, Megaphone, RefreshCw, Handshake, UserX, MailCheck, Instagram, Music } from 'lucide-react';
 import { affiliateService, AffiliateRequest } from '@/services/affiliateService';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,6 +18,7 @@ import { safeStorage } from '@/utils/storage';
 import { useUser } from '@/context/UserContext';
 import type { Coupon } from '@/context/UserContext';
 import { resendVerificationAsAdmin } from '@/services/mailService';
+import { NEW_CUSTOMER_DAYS, isNewCustomer, loadSeenCustomers, markCustomersSeen, memberSince } from '@/utils/newCustomers';
 
 const CustomerList: React.FC = () => {
   const [customers, setCustomers] = useState<CustomerStats[]>([]);
@@ -28,7 +29,23 @@ const CustomerList: React.FC = () => {
   const { permissions } = useUser();
   const confirm = useConfirm();
   const denyDelete = () => toast({ title: 'Sem permissão', description: 'Seu nível não permite excluir. (Nível 2+)', variant: 'destructive' });
-  const customersPagination = usePagination(customers, 8);
+  // Cliente novo: conta criada nos últimos dias que o admin ainda não abriu (bolinha vermelha).
+  const [seenCustomers, setSeenCustomers] = useState<Set<string>>(() => loadSeenCustomers());
+  const [onlyNew, setOnlyNew] = useState(false);
+  const newCustomers = useMemo(() => customers.filter((customer) => isNewCustomer(customer, seenCustomers)), [customers, seenCustomers]);
+  // Novos primeiro (têm 0 pedidos e ficariam no fim da lista, escondidos).
+  const visibleCustomers = useMemo(() => {
+    if (onlyNew) return newCustomers;
+    const fresh = new Set(newCustomers.map((customer) => customer.email));
+    return [...customers].sort((a, b) => Number(fresh.has(b.email)) - Number(fresh.has(a.email)));
+  }, [customers, newCustomers, onlyNew]);
+  // Sem novos sobrando, sai do filtro (senão a lista ficaria vazia).
+  useEffect(() => { if (onlyNew && newCustomers.length === 0) setOnlyNew(false); }, [onlyNew, newCustomers.length]);
+  const customersPagination = usePagination(visibleCustomers, 8);
+  const selectCustomer = (customer: CustomerStats) => {
+    setSelectedCustomer(customer);
+    if (isNewCustomer(customer, seenCustomers)) setSeenCustomers(markCustomersSeen([customer.email], seenCustomers));
+  };
 
   // Concessão de cupom (admin → perfil do cliente)
   const [grantTarget, setGrantTarget] = useState<{ email: string; name: string } | 'ALL' | null>(null);
@@ -505,7 +522,38 @@ const CustomerList: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Lista de Clientes */}
         <div className="space-y-4">
-          <h2 className="text-xl sm:text-2xl font-bold">Clientes</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-xl sm:text-2xl font-bold">Clientes</h2>
+            {newCustomers.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={onlyNew ? 'default' : 'outline'}
+                  className="gap-1.5 text-xs"
+                  aria-pressed={onlyNew}
+                  onClick={() => setOnlyNew((value) => !value)}
+                >
+                  <span aria-hidden className="h-2 w-2 rounded-full bg-red-500" />
+                  Novos ({newCustomers.length})
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="text-xs"
+                  onClick={() => { setSeenCustomers(markCustomersSeen(newCustomers.map((customer) => customer.email), seenCustomers)); setOnlyNew(false); }}
+                >
+                  Marcar todos como vistos
+                </Button>
+              </div>
+            )}
+          </div>
+          {newCustomers.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              A bolinha vermelha marca contas criadas nos últimos {NEW_CUSTOMER_DAYS} dias que você ainda não abriu.
+            </p>
+          )}
           <div className="space-y-3 max-h-[500px] lg:max-h-[600px] overflow-y-auto">
             {customers.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
@@ -522,12 +570,18 @@ const CustomerList: React.FC = () => {
                 <CardContent className="p-3 sm:p-4">
                   <div
                     className="cursor-pointer"
-                    onClick={() => setSelectedCustomer(customer)}
+                    onClick={() => selectCustomer(customer)}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
+                          {isNewCustomer(customer, seenCustomers) && (
+                            <span role="img" aria-label="Cliente novo" title="Cliente novo" className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 ring-2 ring-red-200" />
+                          )}
                           <h3 className="font-semibold text-base sm:text-lg truncate">{customer.name}</h3>
+                          {isNewCustomer(customer, seenCustomers) && (
+                            <span className="shrink-0 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-700">Novo</span>
+                          )}
                           {verificationBadge(customer.email)}
                         </div>
                         <p className="text-xs sm:text-sm text-muted-foreground flex items-center gap-1 truncate">
@@ -538,6 +592,12 @@ const CustomerList: React.FC = () => {
                           <p className="text-xs sm:text-sm text-muted-foreground flex items-center gap-1">
                             <Phone className="h-3 w-3 flex-shrink-0" />
                             {customer.phone}
+                          </p>
+                        )}
+                        {memberSince(customer.createdAt) && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Calendar className="h-3 w-3 flex-shrink-0" />
+                            {memberSince(customer.createdAt)}
                           </p>
                         )}
                       </div>
@@ -673,6 +733,9 @@ const CustomerList: React.FC = () => {
                 <CardHeader>
                   <CardTitle>{selectedCustomer.name}</CardTitle>
                   <CardDescription>{selectedCustomer.email}</CardDescription>
+                  {memberSince(selectedCustomer.createdAt) && (
+                    <p className="flex items-center gap-1 text-sm text-muted-foreground"><Calendar className="h-3.5 w-3.5" /> {memberSince(selectedCustomer.createdAt)}</p>
+                  )}
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">

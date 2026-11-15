@@ -51,6 +51,8 @@ export interface CustomerStats {
   phone: string;
   gender?: 'masculino' | 'feminino' | 'outro';
   birthdate?: string; // "YYYY-MM" format
+  /** Quando criou a conta (ISO). Ausente em cadastros muito antigos. */
+  createdAt?: string;
   totalOrders: number;
   totalSpent: number;
   averageOrderValue: number;
@@ -93,6 +95,7 @@ export const customerService = {
           phone: user.phone || 'N/A',
           gender: user.gender,
           birthdate: user.birthdate,
+          createdAt: user.createdAt,
           totalOrders: 0,
           totalSpent: 0,
           averageOrderValue: 0,
@@ -150,6 +153,7 @@ export const customerService = {
         phone: user.phone || 'N/A',
         gender: user.gender,
         birthdate: user.birthdate,
+        createdAt: user.createdAt,
         totalOrders: orders.length,
         totalSpent,
         averageOrderValue: totalSpent / orders.length,
@@ -291,6 +295,7 @@ export const customerService = {
           totalSpent,
           averageOrderValue: orders.length > 0 ? totalSpent / orders.length : 0,
           lastOrderDate: orderHistory[0]?.date || null,
+          createdAt: typeof data.createdAt === 'string' ? data.createdAt : undefined,
           socialFollows: data.socialFollows,
           favoriteProducts,
           orderHistory,
