@@ -7,7 +7,8 @@ import { useUser } from '@/context/UserContext';
 import { useProducts } from '@/context/ProductsContext';
 import { useToast } from '@/hooks/use-toast';
 import { affiliateService, affiliateLink, isPromoter, SITE_URL, TIER_CONFIG } from '@/services/affiliateService';
-import type { AffiliateDashboard, AffiliateRequest, AffiliateReview, AffiliateTier, PromoterOrders } from '@/services/affiliateService';
+import type { AffiliateDashboard, AffiliateRequest, AffiliateReview, AffiliateTier, PartnerStats as PartnerStatsData, PromoterOrders } from '@/services/affiliateService';
+import PartnerStats from '@/components/affiliate/PartnerStats';
 import { AFFILIATE_TIERS } from '../../shared/partnership.js';
 import { COMPANY_PROFILE } from '@/config/companyProfile';
 
@@ -37,6 +38,8 @@ const AffiliatePage: React.FC = () => {
   const [reviewUrl, setReviewUrl] = useState<Record<string, string>>({});
   const [sendingReview, setSendingReview] = useState<string | null>(null);
   // Pedido de afiliação (aberto a qualquer cliente; a equipe analisa e aprova).
+  // De onde vêm as visitas, cadastros e compradores de cada código.
+  const [codeStats, setCodeStats] = useState<Record<string, PartnerStatsData>>({});
   const [affRequest, setAffRequest] = useState<AffiliateRequest | null>(null);
   const [requesting, setRequesting] = useState(false);
 
@@ -77,6 +80,7 @@ const AffiliatePage: React.FC = () => {
       return;
     }
     affiliateService.getMyRequest(user.email).then(setAffRequest);
+    affiliateService.getCodeStats().then((result) => { if (result) setCodeStats(result.codes); });
     affiliateService.getByOwnerEmail(user.email).then(async (list) => {
       setAffiliates(list);
       if (list.some(isPromoter)) {
@@ -229,18 +233,22 @@ const AffiliatePage: React.FC = () => {
                           </span>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="bg-secondary/30 rounded-xl p-4">
-                            <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1"><Users className="w-3 h-3" /> Pessoas que vieram</p>
-                            <p className="text-2xl font-bold">{visits}</p>
-                            <p className="text-[10px] text-muted-foreground">{aff.linkVisits || 0} pelo link · {aff.codeVisits || 0} pelo código</p>
-                          </div>
-                          <div className="bg-primary/10 rounded-xl p-4 border border-primary/20">
-                            <p className="text-xs text-primary flex items-center gap-1 mb-1"><ShoppingBag className="w-3 h-3" /> Compraram</p>
-                            <p className="text-2xl font-bold text-primary">{buyers}</p>
-                            <p className="text-[10px] text-muted-foreground">pedidos pagos com seu link ou código</p>
-                          </div>
-                        </div>
+                        {codeStats[aff.code]
+                          ? <PartnerStats stats={codeStats[aff.code]} />
+                          : (
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="bg-secondary/30 rounded-xl p-4">
+                                <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1"><Users className="w-3 h-3" /> Pessoas que vieram</p>
+                                <p className="text-2xl font-bold">{visits}</p>
+                                <p className="text-[10px] text-muted-foreground">{aff.linkVisits || 0} pelo link · {aff.codeVisits || 0} pelo código</p>
+                              </div>
+                              <div className="bg-primary/10 rounded-xl p-4 border border-primary/20">
+                                <p className="text-xs text-primary flex items-center gap-1 mb-1"><ShoppingBag className="w-3 h-3" /> Compraram</p>
+                                <p className="text-2xl font-bold text-primary">{buyers}</p>
+                                <p className="text-[10px] text-muted-foreground">pedidos pagos com seu link ou código</p>
+                              </div>
+                            </div>
+                          )}
 
                         {bought && bought.orders.length > 0 && (
                           <details className="rounded-xl border border-border px-4 py-3">
@@ -438,6 +446,14 @@ const AffiliatePage: React.FC = () => {
                         )}
                       </div>
                     </div>
+
+                    {/* De onde vêm as visitas, cadastros e compradores */}
+                    {codeStats[aff.code] && (
+                      <details className="rounded-xl border border-border px-4 py-3" open={codeStats[aff.code].visits > 0}>
+                        <summary className="cursor-pointer text-sm font-semibold">Visitas, cadastros e compras do seu código</summary>
+                        <div className="mt-4"><PartnerStats stats={codeStats[aff.code]} /></div>
+                      </details>
+                    )}
 
                     {/* Link de indicação */}
                     <div>

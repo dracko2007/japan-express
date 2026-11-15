@@ -93,6 +93,7 @@ export interface Affiliate {
   visitCount?: number;        // pessoas que chegaram pelo link ou digitaram o código
   linkVisits?: number;
   codeVisits?: number;
+  signupCount?: number;       // pessoas que criaram conta depois de chegar pelo link/código
   ownerName: string;
   ownerEmail: string;
   discountPercent: number;
@@ -109,6 +110,26 @@ export interface Affiliate {
   tierUpdatedAt?: string;
   tierSettings?: AffiliateTierSettings;
 }
+
+/** De onde vêm as visitas de um código, quantos se cadastraram e quantos compraram (`/api/affiliates`, `code-stats`). */
+export interface PartnerStats {
+  kind?: AffiliateKind;
+  visits: number;
+  linkVisits: number;
+  codeVisits: number;
+  /** Pessoas que criaram conta depois de chegar pelo link ou código. */
+  signups: number;
+  /** Pessoas distintas que compraram (pedido pago e não cancelado). */
+  buyers: { total: number; registered: number; guest: number; orders: number };
+  countries: Record<string, number>;
+  /** Chave `BR-SP`. */
+  regions: Record<string, number>;
+  /** Só na visão do admin. */
+  cities: Record<string, number>;
+  devices: Record<string, number>;
+  os: Record<string, number>;
+}
+export interface PartnerStatsResult { codes: Record<string, PartnerStats>; totals: PartnerStats }
 
 /** O que o servidor devolve ao validar um código no carrinho. */
 export type AffiliateCouponInfo = Pick<Affiliate, 'code' | 'ownerName' | 'discountPercent' | 'expiresAt' | 'kind'>;
@@ -321,6 +342,40 @@ export const affiliateService = {
       if (response.ok) safeStorage.setItem(sentKey, '1');
     } catch (e) {
       devWarn('affiliateService.trackVisit falhou:', e);
+    }
+  },
+
+  /**
+   * Conta que acabou de ser criada na mesma sessão em que a pessoa chegou por um link/código.
+   * Chamar logo após o cadastro, com a sessão do novo usuário ainda aberta. Nunca atrapalha o cadastro.
+   */
+  async trackSignup(): Promise<void> {
+    const code = safeStorage.getItem('affiliate_ref');
+    if (!code) return;
+    try {
+      await authenticatedFetch('/api/affiliates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'track-signup', code: normalize(code) }),
+      });
+    } catch (e) {
+      devWarn('affiliateService.trackSignup falhou:', e);
+    }
+  },
+
+  /** Visitas (de onde e aparelho), cadastros e compradores por código. `admin`: todos os códigos. */
+  async getCodeStats(admin = false): Promise<PartnerStatsResult | null> {
+    try {
+      const response = await authenticatedFetch('/api/affiliates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'code-stats', ...(admin ? { admin: true } : {}) }),
+      });
+      if (!response.ok) throw new Error(`status ${response.status}`);
+      return await response.json() as PartnerStatsResult;
+    } catch (e) {
+      devWarn('affiliateService.getCodeStats falhou:', e);
+      return null;
     }
   },
 

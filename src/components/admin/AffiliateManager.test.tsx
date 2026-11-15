@@ -28,6 +28,7 @@ vi.mock('@/services/affiliateService', () => ({
     getPendingCommissions: vi.fn().mockResolvedValue([]),
     getAllReviews: vi.fn().mockResolvedValue([]),
     getPromoterOrders: vi.fn().mockResolvedValue({}),
+    getCodeStats: vi.fn().mockResolvedValue(null),
     checkReviews: vi.fn().mockResolvedValue(null),
     save: (...args: unknown[]) => save(...args),
   },

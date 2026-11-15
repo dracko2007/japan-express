@@ -48,6 +48,8 @@ export interface DailyStats {
   total: number;
   countries: Record<string, number>; // { 'BR': 42, 'PT': 8, ... }
   cities: Record<string, number>;    // { 'São Paulo': 20, ... }
+  devices?: Record<string, number>;  // { mobile: 30, desktop: 12 } (a partir da versão que registra aparelho)
+  os?: Record<string, number>;       // { iOS: 20, Android: 10, Windows: 12 }
 }
 
 export interface GeoInfo {
@@ -188,6 +190,8 @@ export const visitorService = {
     avgPerDay: number;
     topCountries: Array<{ code: string; count: number }>;
     topCities: Array<{ city: string; count: number }>;
+    devices: Record<string, number>;
+    os: Record<string, number>;
     dailyData: DailyStats[];
   }> {
     const dailyData = await this.getRecentDays(days);
@@ -197,7 +201,11 @@ export const visitorService = {
     // Agrega países
     const countryMap: Record<string, number> = {};
     const cityMap: Record<string, number> = {};
+    const devices: Record<string, number> = {};
+    const os: Record<string, number> = {};
     dailyData.forEach(d => {
+      Object.entries(d.devices || {}).forEach(([k, v]) => { devices[k] = (devices[k] || 0) + Number(v); });
+      Object.entries(d.os || {}).forEach(([k, v]) => { os[k] = (os[k] || 0) + Number(v); });
       Object.entries(d.countries || {}).forEach(([k, v]) => { countryMap[k] = (countryMap[k] || 0) + Number(v); });
       Object.entries(d.cities || {}).forEach(([k, v]) => { cityMap[k] = (cityMap[k] || 0) + Number(v); });
     });
@@ -212,6 +220,6 @@ export const visitorService = {
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
-    return { totalVisits, avgPerDay, topCountries, topCities, dailyData };
+    return { totalVisits, avgPerDay, topCountries, topCities, devices, os, dailyData };
   },
 };

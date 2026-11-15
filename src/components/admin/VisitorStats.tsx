@@ -1,7 +1,12 @@
 import React, { useCallback, useState, useEffect } from 'react';
-import { Users, Globe, MapPin, TrendingUp, ExternalLink, RefreshCw, FileText, ShoppingBag } from 'lucide-react';
+import { Users, Globe, MapPin, TrendingUp, ExternalLink, RefreshCw, FileText, ShoppingBag, Megaphone, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { visitorService } from '@/services/visitorService';
+import { affiliateService } from '@/services/affiliateService';
+import type { PartnerStatsResult } from '@/services/affiliateService';
+import PartnerStats from '@/components/affiliate/PartnerStats';
+import StatBars from '@/components/affiliate/StatBars';
+import { DEVICE_LABEL } from '@/utils/partnerLabels';
 
 const FLAG: Record<string, string> = {
   BR: '🇧🇷', PT: '🇵🇹', US: '🇺🇸', JP: '🇯🇵', FR: '🇫🇷', IT: '🇮🇹',
@@ -20,7 +25,7 @@ const COUNTRY_NAME: Record<string, string> = {
 
 const GA4_URL = 'https://analytics.google.com/analytics/web/?authuser=1#/p/15438581912/reports/intelligenthome';
 
-type TabId = 'overview' | 'pages' | 'products';
+type TabId = 'overview' | 'pages' | 'products' | 'partners';
 
 export default function VisitorStats() {
   const [period, setPeriod] = useState<7 | 30 | 90>(30);
@@ -31,11 +36,26 @@ export default function VisitorStats() {
   const [topProducts, setTopProducts] = useState<Array<{ productId: string; productName: string; views: number }>>([]);
 
   const [error, setError] = useState('');
+  // Visitas pelos links e códigos de afiliados/divulgadores (só carrega ao abrir a aba).
+  const [partners, setPartners] = useState<PartnerStatsResult | null>(null);
+  const [partnersState, setPartnersState] = useState<'idle' | 'loading' | 'error'>('idle');
+
+  useEffect(() => {
+    if (tab !== 'partners' || partners || partnersState !== 'idle') return;
+    setPartnersState('loading');
+    affiliateService.getCodeStats(true).then((result) => {
+      setPartners(result);
+      setPartnersState(result ? 'idle' : 'error');
+    });
+  }, [tab, partners, partnersState]);
 
   // Uma consulta que falhava deixava a aba carregando para sempre, sem aviso.
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
+    // "Atualizar" também refaz os dados de parceiros (a aba busca de novo ao abrir).
+    setPartners(null);
+    setPartnersState('idle');
     try {
       const [s, pages, products] = await Promise.all([
         visitorService.getSummary(period),
@@ -94,6 +114,7 @@ export default function VisitorStats() {
           { id: 'overview', label: 'Visão Geral', icon: Users },
           { id: 'pages', label: 'Páginas', icon: FileText },
           { id: 'products', label: 'Produtos', icon: ShoppingBag },
+          { id: 'partners', label: 'Parceiros', icon: Megaphone },
         ] as { id: TabId; label: string; icon: React.ElementType }[]).map(({ id, label, icon: Icon }) => (
           <button key={id} onClick={() => setTab(id)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
@@ -233,7 +254,68 @@ export default function VisitorStats() {
                 </div>
               )}
             </div>
+            {/* Aparelhos (celular, computador, tablet) */}
+            <div className="bg-card rounded-2xl border border-border p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <Smartphone className="w-4 h-4 text-pink-500" />
+                <h3 className="font-semibold text-sm">Aparelhos</h3>
+              </div>
+              {Object.keys(summary.devices).length === 0 ? (
+                <p className="text-sm text-muted-foreground">O aparelho começa a ser registrado nas próximas visitas.</p>
+              ) : (
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <StatBars title="Aparelho" data={summary.devices} label={(key) => DEVICE_LABEL[key] || key} />
+                  <StatBars title="Sistema" data={summary.os} />
+                </div>
+              )}
+            </div>
           </div>}
+
+          {/* Tab: Parceiros (visitas pelos links e códigos de afiliados e divulgadores) */}
+          {tab === 'partners' && (
+            <div className="space-y-4">
+              {partnersState === 'loading' && !partners && <p className="py-10 text-center text-sm text-muted-foreground">Carregando os dados dos parceiros…</p>}
+              {partnersState === 'error' && <p role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700">Não foi possível carregar os parceiros. Tente atualizar.</p>}
+              {partners && (
+                <>
+                  <div className="rounded-2xl border border-border bg-card p-5">
+                    <PartnerStats stats={partners.totals} showCities title="Todos os links e códigos de parceiros" />
+                  </div>
+                  <div className="overflow-x-auto rounded-2xl border border-border bg-card p-5">
+                    <h3 className="mb-3 text-sm font-semibold">Por código</h3>
+                    {Object.keys(partners.codes).length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Nenhum afiliado ou divulgador cadastrado.</p>
+                    ) : (
+                      <table className="w-full min-w-[620px] text-xs">
+                        <thead>
+                          <tr className="border-b text-left text-muted-foreground">
+                            {['Código', 'Tipo', 'Visitaram', 'Se cadastraram', 'Compraram', 'Com cadastro', 'Sem cadastro', 'Aparelho principal'].map((h) => <th key={h} className="py-1.5 pr-3 font-medium">{h}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Object.entries(partners.codes).sort((a, b) => b[1].visits - a[1].visits).map(([code, stats]) => {
+                            const top = Object.entries(stats.devices).sort((a, b) => b[1] - a[1])[0];
+                            return (
+                              <tr key={code} className="border-b last:border-0 tabular-nums">
+                                <td className="py-1.5 pr-3 font-mono font-semibold">{code}</td>
+                                <td className="pr-3">{stats.kind === 'promoter' ? 'Divulgador' : 'Afiliado'}</td>
+                                <td className="pr-3">{stats.visits}</td>
+                                <td className="pr-3">{stats.signups}</td>
+                                <td className="pr-3 font-semibold">{stats.buyers.total}</td>
+                                <td className="pr-3">{stats.buyers.registered}</td>
+                                <td className="pr-3">{stats.buyers.guest}</td>
+                                <td>{top ? DEVICE_LABEL[top[0]] || top[0] : '—'}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Tab: Páginas */}
           {tab === 'pages' && (
