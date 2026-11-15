@@ -14,6 +14,8 @@ interface State {
   hasError: boolean;
   error: Error | null;
   isChunkError: boolean;
+  /** A recarga automática já foi tentada há pouco e o erro continua: pede ajuda do cliente. */
+  recoveryBlocked: boolean;
 }
 
 /**
@@ -21,14 +23,14 @@ interface State {
  * uma tela de recuperação amigável em vez de quebrar a página inteira.
  */
 class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false, error: null, isChunkError: false };
+  state: State = { hasError: false, error: null, isChunkError: false, recoveryBlocked: false };
 
   static isChunk(error: Error) {
     return error.name === 'ChunkLoadError' || isChunkLoadError(error.message);
   }
 
   static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error, isChunkError: ErrorBoundary.isChunk(error) };
+    return { hasError: true, error, isChunkError: ErrorBoundary.isChunk(error), recoveryBlocked: false };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
@@ -36,15 +38,18 @@ class ErrorBoundary extends Component<Props, State> {
     // PWA deploy: old SW serves stale HTML with old chunk hashes → 404 on import.
     // Limpa o cache do SW e recarrega de forma limpa (com proteção contra loop).
     if (ErrorBoundary.isChunk(error)) {
-      void recoverFromChunkError();
+      void recoverFromChunkError().then((started) => {
+        if (!started) this.setState({ recoveryBlocked: true });
+      });
     }
   }
 
   handleReset = () => {
     if (this.state.isChunkError) {
-      void recoverFromChunkError();
+      // Toque do cliente: sempre limpa e recarrega (sem a pausa anti-loop).
+      void recoverFromChunkError({ force: true });
     } else {
-      this.setState({ hasError: false, error: null, isChunkError: false });
+      this.setState({ hasError: false, error: null, isChunkError: false, recoveryBlocked: false });
     }
   };
 
@@ -63,20 +68,30 @@ class ErrorBoundary extends Component<Props, State> {
           </h2>
           <p className="text-sm text-muted-foreground mb-6">
             {this.state.isChunkError
-              ? 'O site foi atualizado. A página será recarregada automaticamente em instantes...'
+              ? this.state.recoveryBlocked
+                ? 'O site foi atualizado e esta aba ainda está com a versão antiga. Toque em "Atualizar agora" para limpar e recarregar. Se continuar, feche o app/aba e abra de novo.'
+                : 'O site foi atualizado. A página será recarregada automaticamente em instantes...'
               : 'Encontramos um problema ao carregar esta parte da página. Você pode tentar novamente ou voltar para o início.'}
           </p>
-          {this.state.error && (
+          {/* Detalhe técnico só para quem precisar (suporte); o cliente não precisa ler um TypeError. */}
+          {this.state.error && (this.state.isChunkError ? (
+            <details className="mb-6 text-left">
+              <summary className="cursor-pointer text-xs text-muted-foreground">Detalhes técnicos</summary>
+              <pre className="mt-2 text-xs bg-secondary/40 rounded-lg p-3 whitespace-pre-wrap break-all max-h-32 overflow-auto text-red-600 dark:text-red-400">
+                {this.state.error.name}: {this.state.error.message}
+              </pre>
+            </details>
+          ) : (
             <pre className="text-left text-xs bg-secondary/40 rounded-lg p-3 mb-6 overflow-auto max-h-32 text-red-600 dark:text-red-400">
               {this.state.error.name}: {this.state.error.message}
             </pre>
-          )}
+          ))}
           <div className="flex gap-3 justify-center">
             <button
               onClick={this.handleReset}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-medium hover:opacity-90 transition"
             >
-              <RefreshCw className="w-4 h-4" /> Tentar novamente
+              <RefreshCw className="w-4 h-4" /> {this.state.isChunkError ? 'Atualizar agora' : 'Tentar novamente'}
             </button>
             <a
               href="/"

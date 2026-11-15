@@ -71,6 +71,19 @@ describe('recoverFromChunkError', () => {
     expect(segunda).toBe(false);
     expect(replace).toHaveBeenCalledTimes(1);
   });
+
+  it('o toque do cliente (force) ignora a pausa anti-loop; sem force a pausa vale', async () => {
+    const { replace } = encenar([registro('https://www.japanexpress-store.com/')]);
+
+    expect(await recoverFromChunkError()).toBe(true);
+    expect(replace).toHaveBeenCalledTimes(1);
+    // Logo em seguida o automático é barrado...
+    expect(await recoverFromChunkError()).toBe(false);
+    expect(replace).toHaveBeenCalledTimes(1);
+    // ...mas o botão "Atualizar agora" sempre funciona.
+    expect(await recoverFromChunkError({ force: true })).toBe(true);
+    expect(replace).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('isChunkLoadError', () => {
