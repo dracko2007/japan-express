@@ -37,7 +37,7 @@ function extractDiscountPercent(order) {
 
   // Fallback: tenta extrair o número do código `CARRINHO<n>`
   if (typeof order.couponCode === 'string') {
-    const match = order.couponCode.match(/^CARRINHO(\d{1,2})(?:-[A-Z0-9]+)?$/i);
+    const match = order.couponCode.match(/^CARRINHO(?:BACK)?(\d{1,2})(?:-[A-Z0-9]+)?$/i);
     if (match) {
       const extracted = Number(match[1]);
       if (Number.isFinite(extracted)) return extracted;
@@ -212,6 +212,11 @@ export async function fulfillOrder(orderId, { provider, reference, confirmedBy }
       if (cpfDoPedido.length === 11 && usedByCpf.includes(cpfDoPedido)) throw new HttpError(409, 'coupon_already_used');
     }
 
+    // Cupom de recuperação: um uso por CPF (ou por conta, sem CPF). Segunda barreira — a primeira está em
+    // `orders.js`; aqui pega a corrida entre dois pedidos do mesmo CPF antes do dinheiro entrar.
+    const recoveryCoupon = couponSnap?.exists && couponSnap.data()?.recovery === true;
+    if (recoveryCoupon && cpfData.recoveryCouponCode) throw new HttpError(409, 'recovery_coupon_cpf_used');
+
     const affiliateSnap = affiliateRef ? byPath.get(affiliateRef.path) : null;
     if (affiliateRef && (!affiliateSnap.exists || affiliateSnap.data()?.active === false)) throw new HttpError(409, 'affiliate_unavailable');
 
@@ -258,6 +263,7 @@ export async function fulfillOrder(orderId, { provider, reference, confirmedBy }
         productIds: unique([...(cpfData.productIds || []), ...limitedProducts]),
         affiliateCodes: unique([...(cpfData.affiliateCodes || []), ...(order.affiliateCode && !promoterOrder && !order.affiliateProductId ? [order.affiliateCode] : [])]),
         promoterCodes: unique([...(cpfData.promoterCodes || []), ...(promoterOrder ? [order.affiliateCode] : [])]),
+        ...(recoveryCoupon ? { recoveryCouponCode: order.couponCode, recoveryCouponUsedAt: new Date().toISOString() } : {}),
       }, { merge: true });
     }
     if (promoUsageRef) {

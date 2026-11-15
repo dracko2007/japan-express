@@ -11,6 +11,7 @@ import {
   sendError,
 } from './_lib/http.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
+import { openRecoveryCoupon } from './_lib/recovery-coupon.js';
 
 // A resposta diz se o código existe (404 × 409 × 200). Sem limite, dava para
 // testar códigos em série até achar um cupom. O cliente só chama ao clicar em
@@ -47,8 +48,26 @@ function publicCoupon(code, coupon) {
   };
 }
 
+// Abre o link do e-mail de recuperação de carrinho: começa a janela do cupom e devolve o cupom para
+// o carrinho aplicar sozinho. Exige login com e-mail verificado (o cupom é nominal).
+async function handleRecoveryOpen(req, res) {
+  try {
+    const user = await requireUser(req);
+    await enforceRateLimit(req, { scope: 'recovery-open', limit: 20, windowMs: COUPON_CHECK_WINDOW_MS, identity: user.uid });
+    const body = parseJsonObject(req.body);
+    assertExactKeys(body, ['link']);
+    const link = requiredText(body.link, { max: 200, pattern: /^[A-Za-z0-9._-]+$/ });
+    const { code, coupon, windowEndsAt, replay } = await openRecoveryCoupon(adminDb(), { link, user });
+    res.status(200).json({ ok: true, coupon: publicCoupon(code, coupon), windowEndsAt, replay });
+  } catch (error) {
+    console.error('[recovery-open]', error instanceof Error ? error.message : error);
+    sendError(res, error);
+  }
+}
+
 export default async function handler(req, res) {
   if (!handleCors(req, res, { methods: ['POST'] })) return;
+  if (req.query?.action === 'recovery-open') return handleRecoveryOpen(req, res);
 
   try {
     const body = parseJsonObject(req.body);

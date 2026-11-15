@@ -124,9 +124,35 @@ describe('recuperação de carrinho', () => {
     await rodar(24 * 10, 2);
 
     const c = mocks.set.mock.calls[0][0];
-    expect(c.code).toMatch(/^CARRINHO30-[A-F0-9]{10}$/);
+    expect(c.code).toMatch(/^CARRINHOBACK30-[A-F0-9]{10}$/);
     expect(c.targetEmails).toEqual(['cliente@exemplo.com']);
     expect(c.targetType).toBe('specific');
+  });
+
+  it('o cupom nasce como chance única: só pelo link, com janela e dono', async () => {
+    await rodar(24 * 10, 2);
+
+    const c = mocks.set.mock.calls[0][0];
+    expect(c.recovery).toBe(true);
+    expect(c.recoveryOwnerUid).toBe('uid1');
+    expect(c.recoveryWindowMs).toBe(2 * 60 * 60 * 1000);
+    expect(c.openedAt).toBeNull();
+    expect(c.windowEndsAt).toBeNull();
+  });
+
+  it('o botão do e-mail leva a chave que ativa o cupom; o código impresso sozinho não basta', async () => {
+    await rodar(24 * 10, 2);
+
+    const c = mocks.set.mock.calls[0][0];
+    const { html } = mocks.sendMail.mock.calls[0][0];
+    const href = /href="([^"]*\/carrinho\?rec=[^"]+)"/.exec(html)?.[1];
+    expect(href).toBeTruthy();
+    const param = decodeURIComponent(href.split('rec=')[1]);
+    expect(param.startsWith(`${c.code}.`)).toBe(true);
+    // A chave não é o código: quem só tem o código impresso não consegue montar o link.
+    expect(param.slice(c.code.length + 1)).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    expect(html).toMatch(/2 horas/);
+    expect(html).toMatch(/uma vez por CPF/);
   });
   
   it('espera três dias reais entre os e-mails de desconto', async () => {
@@ -194,4 +220,13 @@ describe('recuperação de carrinho', () => {
     expect(res.body.sent).toBe(0);
   });
 
+
+  it('reemitir o mesmo cupom não zera a abertura do link (a janela não reabre)', async () => {
+    mocks.cupomExistente = { code: 'x', openedAt: 123, windowEndsAt: 456 };
+    await rodar(24 * 10, 2);
+
+    const c = mocks.set.mock.calls[0][0];
+    expect('openedAt' in c).toBe(false);
+    expect('windowEndsAt' in c).toBe(false);
+  });
 });
