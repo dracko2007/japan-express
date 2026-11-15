@@ -21,6 +21,7 @@ import { convertYen as fxConvert } from '@/services/fxService';
 import { authenticatedFetch } from '@/services/authenticatedFetch';
 import { toast } from 'sonner';
 import { COMPANY_PROFILE } from '@/config/companyProfile';
+import { PARTNERSHIP_KEYWORDS, partnershipAnswer, partnershipExamples } from '../../shared/partnership.js';
 import { onOpenRequest, setMinimized, useMinimized } from '@/utils/floatingWidgets';
 import { useDraggableBubble } from '@/hooks/useDraggableBubble';
 
@@ -661,6 +662,15 @@ const KimiClawAssistant: React.FC = () => {
         }
       ]);
       setShippingData({});
+      return;
+    }
+
+    // 0.P PROGRAMA DE PARCERIAS (afiliados e divulgadores): mesma explicação que a IA recebe
+    // (shared/partnership.js). Aqui responde o botão de atalho e serve de rede de segurança
+    // quando a IA não responde.
+    if (PARTNERSHIP_KEYWORDS.test(normalizeText(query))) {
+      const partnerLang = language === 'en' || language === 'ja' ? language : 'pt';
+      await addKimiMessageWithTyping(`${partnershipAnswer(partnerLang)}\n\n${partnershipExamples(partnerLang)}`);
       return;
     }
 
@@ -1766,6 +1776,12 @@ const KimiClawAssistant: React.FC = () => {
                       className="text-[11px] bg-card hover:bg-primary/10 border border-border hover:border-primary/30 rounded-full px-2.5 py-1 text-foreground transition duration-200"
                     >
                       {t('kimiclaw.skill.apply_coupon')}
+                    </button>
+                    <button
+                      onClick={() => handleSuggestionClick(language === 'pt' ? 'Como funciona o programa de afiliados? Quanto eu ganho?' : language === 'ja' ? 'アフィリエイトプログラムの仕組みと報酬を教えてください' : 'How does the affiliate program work? How much do I earn?', 'programa de afiliados', { agent: true })}
+                      className="text-[11px] bg-card hover:bg-primary/10 border border-border hover:border-primary/30 rounded-full px-2.5 py-1 text-foreground transition duration-200"
+                    >
+                      🤝 {language === 'pt' ? 'Afiliados' : language === 'ja' ? 'パートナー' : 'Affiliates'}
                     </button>
                     <button
                       onClick={() => handleSuggestionClick('📱 Receber novidades no WhatsApp', 'enviar whatsapp')}
