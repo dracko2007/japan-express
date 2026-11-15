@@ -1,10 +1,11 @@
-import { createHmac, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { requireCronSecret } from './_lib/auth.js';
 import { isBlockedFrom30 } from './_lib/cart-recovery-profile.js';
 import { isOptedOut } from './_lib/email-optout.js';
 import { adminAuth, adminDb } from './_lib/firebase-admin.js';
 import { escapeHtml, handleCors, sendError } from './_lib/http.js';
 import { sendMail, siteOrigin, unsubscribeUrl, wrapEmail } from './_lib/mailer.js';
+import { RECOVERY_WINDOW_MS, recoveryCouponCode, recoveryLinkParam } from './_lib/recovery-coupon.js';
 
 const CLAIM_TTL_MS = 10 * 60 * 1000;
 const DISCOUNT_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000;
@@ -22,24 +23,6 @@ const STAGES = [
   { stage: 3, thresholdMs: 9 * 24 * 60 * 60 * 1000, discount: 30, validadeMs: 24 * 60 * 60 * 1000 },
 ];
 
-/**
- * Cada abandono recebe um código próprio. Um código global estendia a validade
- * para todos os destinatários sempre que um novo e-mail saía e fazia a lista
- * `targetEmails` crescer sem limite.
- */
-function recoveryCouponCode(uid, abandonedAt, discount) {
-  const key = process.env.CART_RECOVERY_SECRET
-    || process.env.UNSUBSCRIBE_SECRET
-    || process.env.CRON_SECRET;
-  if (!key) throw new Error('cart_recovery_secret_not_configured');
-  const suffix = createHmac('sha256', key)
-    .update(`${uid}:${abandonedAt}:${discount}`)
-    .digest('hex')
-    .slice(0, 10)
-    .toUpperCase();
-  return `CARRINHO${discount}-${suffix}`;
-}
-
 async function garantirCupom(uid, email, abandonedAt, discount, validadeMs) {
   const code = recoveryCouponCode(uid, abandonedAt, discount);
   const ref = adminDb().collection('coupons').doc(code);
@@ -52,6 +35,11 @@ async function garantirCupom(uid, email, abandonedAt, discount, validadeMs) {
     discount: 0,               // legado: o valor real fica em discountPercent
     discountPercent: discount,
     description: `Recuperacao de carrinho — ${discount}% OFF no pedido`,
+    // Chance única: só vale depois de abrir o link do e-mail, por 2 h, uma vez por CPF
+    // (`_lib/recovery-coupon.js`). Renovar o documento nunca reabre a janela.
+    recovery: true,
+    recoveryOwnerUid: uid,
+    recoveryWindowMs: RECOVERY_WINDOW_MS,
     // Como o documento é individual, renovar este prazo nunca reabre o cupom
     // de outra pessoa.
     expiryDate: new Date(expiraEm).toISOString(),
@@ -59,10 +47,10 @@ async function garantirCupom(uid, email, abandonedAt, discount, validadeMs) {
     targetType: 'specific',
     targetEmails: [email],
     updatedAt: new Date().toISOString(),
-    ...(atual ? {} : { usedCount: 0, createdAt: new Date().toISOString() }),
+    ...(atual ? {} : { usedCount: 0, createdAt: new Date().toISOString(), openedAt: null, windowEndsAt: null }),
   }, { merge: true });
 
-  return { code, horas: Math.round(validadeMs / 3600000) };
+  return { code, horas: Math.round(validadeMs / 3600000), janelaHoras: Math.round(RECOVERY_WINDOW_MS / 3600000) };
 }
 
 function buildRecoveryEmail(stageDef, name, items, cupom, unsub) {
@@ -70,14 +58,15 @@ function buildRecoveryEmail(stageDef, name, items, cupom, unsub) {
     ? items.slice(0, 5).map((item) => `<tr><td style="padding:6px 0;border-bottom:1px solid #eee">${escapeHtml(item.name)}${Number(item.quantity) > 1 ? ` (${Math.floor(Number(item.quantity))}x)` : ''}</td></tr>`).join('')
     : '';
   const greeting = `<p>Ola${name ? `, <strong>${escapeHtml(name)}</strong>` : ''}.</p><p>Seu carrinho ainda esta esperando:</p><table style="width:100%">${rows}</table>`;
-  const cta = `<p style="text-align:center"><a href="${siteOrigin()}/carrinho" style="display:inline-block;background:#ec4899;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-weight:bold">Voltar ao carrinho</a></p>`;
+  // O desconto só vale por este botão: o link leva a chave que ativa o cupom (digitar o código não basta).
+  const cta = `<p style="text-align:center"><a href="${siteOrigin()}/carrinho?rec=${encodeURIComponent(recoveryLinkParam(cupom.code))}" style="display:inline-block;background:#ec4899;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-weight:bold">Voltar ao carrinho com ${stageDef.discount}% OFF</a></p>`;
 
 
   const ultimo = stageDef.stage === STAGES.length;
   const aviso = ultimo
     ? `<p style="margin:6px 0 0;font-size:13px">Esta e a nossa ultima oferta para este carrinho.</p>`
     : '';
-  const discountBlock = `<div style="margin:20px 0;padding:18px;border:2px dashed #ec4899;border-radius:12px;text-align:center"><p style="margin:0">Seu cupom exclusivo</p><p style="font-size:26px;font-weight:900;color:#ec4899;margin:8px 0">${escapeHtml(cupom.code)}</p><p style="margin:0"><strong>${stageDef.discount}% de desconto</strong> se voce finalizar nas proximas <strong>${cupom.horas} horas</strong>.</p><p style="margin:6px 0 0;font-size:13px">So funciona nesta conta e vale para um pedido.</p>${aviso}</div>`;
+  const discountBlock = `<div style="margin:20px 0;padding:18px;border:2px dashed #ec4899;border-radius:12px;text-align:center"><p style="margin:0">Seu cupom exclusivo</p><p style="font-size:26px;font-weight:900;color:#ec4899;margin:8px 0">${escapeHtml(cupom.code)}</p><p style="margin:0"><strong>${stageDef.discount}% de desconto</strong>, aplicado sozinho quando voce tocar no botao abaixo (abra em ate <strong>${cupom.horas} horas</strong>).</p><p style="margin:6px 0 0;font-size:13px">Depois que voce abrir, o cupom vale por <strong>${cupom.janelaHoras} horas</strong>: finalize dentro desse prazo. Vale para um pedido, uma vez por CPF, so nesta conta, e o link nao abre de novo.</p>${aviso}</div>`;
   return {
     subject: ultimo
       ? `Ultima chance: ${stageDef.discount}% OFF por ${cupom.horas}h - Japan Express`

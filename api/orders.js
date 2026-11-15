@@ -677,6 +677,12 @@ async function handleCreate(req, res) {
       await registrarTentativaFraude(db, customer, { attemptType: 'affiliate_reuse', affiliateCode: coupon.affiliateCode });
       throw new HttpError(409, 'affiliate_coupon_already_used');
     }
+    // Cupom de recuperação de carrinho: um uso por CPF (por conta, fora do Brasil). A janela e o
+    // link do e-mail já foram conferidos em `assertCouponEligibility`; a segunda barreira, no
+    // pagamento, está em `fulfillment.js`.
+    if (coupon?.recovery === true && cpfData?.recoveryCouponCode) {
+      throw new HttpError(409, 'recovery_coupon_cpf_used');
+    }
     // Código de divulgador: cada cadastro usa cada código uma única vez
     // (um código novo, de outro vídeo/produto, pode ser usado de novo).
     if (promoterCoupon && cpfData?.promoterCodes?.includes(coupon.affiliateCode)) {

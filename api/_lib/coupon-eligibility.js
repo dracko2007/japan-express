@@ -1,4 +1,5 @@
 import { HttpError } from './http.js';
+import { assertRecoveryCouponUsable } from './recovery-coupon.js';
 
 const PAID_STATUSES = new Set(['confirmed', 'processing', 'shipped', 'delivered']);
 const TOKYO_MONTH_FORMAT = new Intl.DateTimeFormat('en-US', {
@@ -68,6 +69,9 @@ export async function assertCouponEligibility(
   if (!['all', 'specific', 'birthday', 'loyalty'].includes(targetType)) {
     throw new HttpError(403, 'coupon_not_eligible');
   }
+
+  // Recuperação de carrinho: só depois de abrir o link do e-mail, dentro da janela (ver `recovery-coupon.js`).
+  assertRecoveryCouponUsable(coupon, uid);
 
   // Cupom nominal: o endereço É a credencial. Sem prova de posse, não passa.
   if (targetType === 'specific') {

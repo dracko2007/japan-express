@@ -518,3 +518,69 @@ describe('pedido de estoque local', () => {
     expect(db.get('products/p2').localStock).toBeUndefined();
   });
 });
+
+// Cupom de recuperação de carrinho: um uso por CPF (ou por conta, fora do Brasil).
+describe('cupom de recuperação de carrinho: uma vez por CPF', () => {
+  const CPF = '39053344705';
+  const CODIGO = 'CARRINHOBACK15-ABCDEF1234';
+  const cupom = { isActive: true, usedCount: 0, recovery: true, recoveryOwnerUid: 'user-O1' };
+
+  const pedido = (id, overrides = {}) => order(id, { couponSource: 'global', couponCode: CODIGO, ...overrides });
+
+  it('grava o uso no CPF quando o pedido com o cupom é pago', async () => {
+    const db = database(pedido('O1', { cpf: CPF }), 5, { [`coupons/${CODIGO}`]: cupom });
+    injected.db = db;
+
+    await fulfillOrder('O1', { provider: 'manual', reference: 'recup-1', confirmedBy: 'admin' });
+
+    expect(db.get(`cpf_index/${CPF}`)).toMatchObject({ recoveryCouponCode: CODIGO });
+    expect(db.get(`cpf_index/${CPF}`).recoveryCouponUsedAt).toBeTruthy();
+  });
+
+  it('recusa o mesmo CPF com outro cupom de recuperação, mesmo com e-mail e conta novos', async () => {
+    const db = database(pedido('O2', { cpf: CPF, couponCode: 'CARRINHOBACK30-ZZZZZZZZZZ', customerEmail: 'novo@example.com' }), 5, {
+      'coupons/CARRINHOBACK30-ZZZZZZZZZZ': cupom,
+      [`cpf_index/${CPF}`]: { recoveryCouponCode: CODIGO },
+    });
+    injected.db = db;
+
+    await expect(fulfillOrder('O2', { provider: 'manual', reference: 'recup-2', confirmedBy: 'admin' }))
+      .rejects.toMatchObject({ code: 'recovery_coupon_cpf_used', statusCode: 409 });
+    expect(db.get('orders/O2').fulfillmentState).toBe('pending');
+    expect(db.get('products/p1').stock.quantity).toBe(5);
+  });
+
+  it('sem CPF (fora do Brasil) a conta é a âncora', async () => {
+    const db = database(pedido('O1', { cpf: '' }), 5, { [`coupons/${CODIGO}`]: cupom });
+    injected.db = db;
+    await fulfillOrder('O1', { provider: 'manual', reference: 'recup-3', confirmedBy: 'admin' });
+    expect(db.get('cpf_index/uid_user-O1')).toMatchObject({ recoveryCouponCode: CODIGO });
+
+    const db2 = database(pedido('O1', { cpf: '' }), 5, { [`coupons/${CODIGO}`]: cupom, 'cpf_index/uid_user-O1': { recoveryCouponCode: 'CARRINHOBACK10-OUTRO000000' } });
+    injected.db = db2;
+    await expect(fulfillOrder('O1', { provider: 'manual', reference: 'recup-4', confirmedBy: 'admin' }))
+      .rejects.toMatchObject({ code: 'recovery_coupon_cpf_used' });
+  });
+
+  it('cupom comum não grava nada de recuperação no CPF', async () => {
+    const db = database(order('O1', { cpf: CPF, couponSource: 'global', couponCode: 'BEMVINDO' }), 5, { 'coupons/BEMVINDO': { isActive: true, usedCount: 0 } });
+    injected.db = db;
+    await fulfillOrder('O1', { provider: 'manual', reference: 'comum-1', confirmedBy: 'admin' });
+    expect(db.get(`cpf_index/${CPF}`)?.recoveryCouponCode).toBeUndefined();
+  });
+
+  it('o prêmio do pagamento atrasado não depende da janela: o pedido já foi criado com o desconto', async () => {
+    // A janela de 2 h vale para CRIAR o pedido; PIX/Wise pago depois confirma normalmente.
+    const db = database(pedido('O1', { cpf: CPF }), 5, { [`coupons/${CODIGO}`]: { ...cupom, openedAt: 1, windowEndsAt: 2 } });
+    injected.db = db;
+    await expect(fulfillOrder('O1', { provider: 'manual', reference: 'recup-5', confirmedBy: 'admin' })).resolves.toMatchObject({ replay: false });
+  });
+
+  it('o desconto do código novo (CARRINHOBACK15) é reconhecido no perfil de recuperação', async () => {
+    const db = database(pedido('O1', { cpf: CPF }), 5, { [`coupons/${CODIGO}`]: cupom });
+    injected.db = db;
+    await fulfillOrder('O1', { provider: 'manual', reference: 'recup-6', confirmedBy: 'admin' });
+    expect(db.get('cart_recovery_profiles/user-O1')).toMatchObject({ lastDiscountPercent: 15 });
+  });
+});
+

@@ -23,6 +23,8 @@ import { useLocalCart } from '@/hooks/useLocalCart';
 import { useToast } from '@/hooks/use-toast';
 import { setShipAllFromJapan } from '@/utils/localStock';
 import { computeCouponDiscount } from '@/components/checkout/CouponSelector';
+import { recoveryErrorMessage } from '@/services/recoveryCouponService';
+import { useRecoveryLink } from '@/hooks/useRecoveryLink';
 import { taxDisclosure } from '../../shared/tax-disclosure.js';
 
 // Converte um afiliado num "cupom" aplicável (carrega o código para gerar comissão)
@@ -45,7 +47,7 @@ const Cart: React.FC = () => {
   const { items, clearCart, addToCart, removeFromCart } = useCart();
   const { products } = useProducts();
   const { t, language, selectedCountry, setSelectedCountry } = useLanguage();
-  const { isAuthenticated, validateProfileCoupon, coupons, user } = useUser();
+  const { isAuthenticated, authReady, validateProfileCoupon, coupons, user } = useUser();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -132,12 +134,42 @@ const Cart: React.FC = () => {
       return;
     }
     setActiveCoupon(null);
+    // Cupom de recuperação digitado à mão: explica que só vale pelo link do e-mail.
+    const recoveryMessage = recoveryErrorMessage(globalResult.error);
+    if (recoveryMessage && globalResult.error?.startsWith('recovery_')) {
+      setCouponError(recoveryMessage);
+      return;
+    }
     setCouponError(
       isAuthenticated
         ? t('cart.couponInvalid')
         : t('cart.couponLoggedOut')
     );
   };
+
+  // E-mail "seu carrinho ainda está esperando" (/carrinho?rec=...): o desconto entra sozinho ao abrir o link.
+  const { endsAt: recoveryEndsAt } = useRecoveryLink({
+    authReady,
+    isAuthenticated,
+    onOpened: (coupon, windowEndsAt) => {
+      applyCouponObject({
+        id: `recovery-${coupon.code}`,
+        code: coupon.code,
+        description: coupon.description || `Recuperação de carrinho — ${coupon.discountPercent}% OFF`,
+        discount: coupon.discountPercent,
+        discountType: 'percentage',
+        expiresAt: coupon.expiryDate || new Date(windowEndsAt).toISOString(),
+        isUsed: false,
+      });
+      toast({ title: `${coupon.discountPercent}% de desconto aplicado`, description: 'Finalize nesta visita: o cupom vale por 2 horas depois de abrir o e-mail.' });
+    },
+    onError: setCouponError,
+    // Janela vencida na própria tela: tira o cupom (o servidor recusaria de qualquer jeito).
+    onExpired: () => {
+      setActiveCoupon((current) => (current?.id?.startsWith('recovery-') ? null : current));
+      setCouponError(recoveryErrorMessage('recovery_window_closed'));
+    },
+  });
 
   // Aplica automaticamente o código de indicação vindo do link (?ref=CODE)
   useEffect(() => {
@@ -516,6 +548,13 @@ const Cart: React.FC = () => {
               <div className="lg:col-span-1 min-w-0">
                 <div className="bg-card rounded-2xl border border-border p-6 sticky top-24 space-y-6 shadow-sm min-w-0">
                   <h3 className="font-sans text-lg font-bold text-foreground">{t('cart.summary')}</h3>
+
+                  {recoveryEndsAt && (
+                    <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                      Cupom de recuperação aplicado. Ele vale até <strong>{new Date(recoveryEndsAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong> e para um pedido só.
+                      Se sair sem comprar, o cupom é perdido.
+                    </p>
+                  )}
 
                   {/* Coupon Application Input + lista de cupons disponíveis */}
                   {!activeCoupon && (
