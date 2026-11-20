@@ -133,7 +133,7 @@ const Register: React.FC = () => {
         if (verificationEmailSent) {
           toast({
             title: "Confirme seu e-mail",
-            description: "Enviamos um link de confirmação. Clique no link antes de fazer login.",
+            description: "Enviamos um link de confirmação. Clique nele antes de fazer login. Se não achar, olhe também a caixa de spam ou lixo eletrônico.",
           });
         } else {
           toast({
