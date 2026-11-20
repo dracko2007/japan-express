@@ -1,7 +1,7 @@
 // O endereço sem www redireciona (308) para o www: canonical, sitemap e robots precisam apontar para o final.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { SITE_ORIGIN } from './siteOrigin';
+import { SITE_ORIGIN } from '../../src/config/siteOrigin';
 
 const APEX = /https:\/\/japanexpress-store\.com/;
 

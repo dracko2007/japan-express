@@ -230,6 +230,16 @@ export function merchantImagesForProduct(p) {
 }
 
 // ── Monta os itens do catálogo ───────────────────────────────────────────────
+/**
+ * Link do produto no feed. O Google visita a página a partir dos EUA e o site escolhe o país pelo IP: sem isto ele via
+ * US$ na página e R$ no feed. `?pais=br` fixa o Brasil (preço em R$ e frete do Brasil), o mesmo que o feed anuncia.
+ * O canonical continua sem o parâmetro.
+ */
+export function productLinks(id, region) {
+  const canonical = `${SITE_URL}/produto/${id}`;
+  return { link: region === 'br' ? `${canonical}?pais=br` : canonical, canonical };
+}
+
 function buildCatalog(products, region, rates) {
   const zone = region === 'eu' ? 3 : region === 'us' ? 4 : 5;
   const currency = currencyForRegion(region);
@@ -260,14 +270,14 @@ function buildCatalog(products, region, rates) {
       }));
 
       const classification = classifyMerchantProduct(p, region);
-      const link = `${SITE_URL}/produto/${p.id}`;
+      const { link, canonical } = productLinks(p.id, region);
       return {
         id: p.id,
         gtin: p.gtin || undefined,
         title: String(p.name || p.id).replace(/\s+/g, ' ').trim().slice(0, 150),
         description: merchantDescription(p.description || p.name || p.id, region),
         link,
-        canonicalLink: link,
+        canonicalLink: canonical,
         image,
         additionalImages: images.slice(1),
         availability: (p.stock && !p.stock.unlimited && p.stock.quantity === 0) ? 'out_of_stock' : 'in_stock',
