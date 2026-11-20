@@ -5,14 +5,7 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  {
-    ignores: [
-      "dist",
-      // Scripts antigos de troca de imagens (aposentados: o catálogo vive no Firestore). Montam regex em
-      // template string com `\s`, que o JS reduz a `s`: já não funcionavam. Candidatos a remoção.
-      "scripts/legacy/**",
-    ],
-  },
+  { ignores: ["dist"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

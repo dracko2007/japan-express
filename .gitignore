@@ -58,7 +58,6 @@ serviceAccountKey.json
 key.json
 *-service-account*.json
 *serviceAccount*.json
-image-urls.json
 
 # Scripts auxiliares de setup (dev)
 get-rules.cjs
@@ -71,8 +70,6 @@ fetch-real-images.cjs
 fetch-pass2.cjs
 gen-placeholders.cjs
 replace-urls.js
-update-local-images.ts
-fix-images.ts
 fix_images_correct.py
 update.py
 fix_urls.py
