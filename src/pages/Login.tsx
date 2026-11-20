@@ -36,7 +36,7 @@ const Login: React.FC = () => {
   const [verificationNotice, setVerificationNotice] = useState(() => {
     if (verifiedFromLink) return 'E-mail confirmado. Agora entre com seu e-mail e senha.';
     if (verificationEmailFailed) return 'Conta criada, mas nao conseguimos enviar o link automaticamente. Tente entrar para reenviar.';
-    if (verificationEmailSent) return 'Enviamos um link de confirmação para seu e-mail. Clique no link antes de fazer login.';
+    if (verificationEmailSent) return `Enviamos um link de confirmação para ${registeredEmail || 'seu e-mail'}. Clique no link antes de fazer login. Não achou? Olhe também a caixa de spam ou lixo eletrônico.`;
     return '';
   });
 
@@ -200,7 +200,7 @@ const Login: React.FC = () => {
                             {verifiedFromLink && !needsVerification ? 'E-mail confirmado' : 'Confirme seu e-mail'}
                           </p>
                           <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
-                            {verificationNotice || 'Verifique sua caixa de entrada e clique no link de confirmação.'}
+                            {verificationNotice || 'Verifique sua caixa de entrada e a caixa de spam, e clique no link de confirmação.'}
                           </p>
                         </div>
                       </div>
