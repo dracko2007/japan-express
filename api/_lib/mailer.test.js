@@ -470,3 +470,25 @@ describe('texto do e-mail da loja e texto puro com foto', () => {
     vi.unstubAllGlobals();
   });
 });
+
+// O filtro da Microsoft soma sinais fracos: HTML solto (só <div>, sem doctype/body)
+// é um deles. O e-mail de confirmação chegou no lixo com SPF/DKIM/DMARC em pass e
+// SCL 5, então o que sobra é conteúdo e reputação — o que dá para controlar é a forma.
+describe('wrapEmail: documento HTML completo', () => {
+  it('traz doctype, idioma, título e body', () => {
+    const html = wrapEmail('<p>oi</p>');
+    expect(html.startsWith('<!doctype html><html lang="pt-BR">')).toBe(true);
+    expect(html).toContain('<title>Japan Express</title>');
+    expect(html).toContain('<body');
+    expect(html.endsWith('</body></html>')).toBe(true);
+  });
+
+  it('o <title> do head não vira a primeira linha do texto puro', async () => {
+    await sendMail({ ...CARTA, html: wrapEmail('<p>Olá, Maria.</p>') });
+    const { text } = enviado();
+    expect(text.split('\n')[0]).toBe('Japan Express');
+    expect(text.match(/Japan Express/g)).toHaveLength(2); // cabeçalho do card + rodapé, sem o <title>
+    expect(text).not.toMatch(/<|doctype/i);
+    expect(text).toContain('Olá, Maria.');
+  });
+});

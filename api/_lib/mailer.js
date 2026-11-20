@@ -40,7 +40,9 @@ export function wrapEmail(inner, { unsubscribeUrl: unsubscribe = '' } = {}) {
   const optOut = unsubscribe
     ? `<p style="margin:10px 0 0">Voce recebe estas mensagens porque se cadastrou na loja. <a href="${escapeHtml(unsubscribe)}" style="color:#777;text-decoration:underline">Cancelar inscricao</a> para parar de receber.</p>`
     : '';
-  return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;background:#fff;border:1px solid #eee;border-radius:14px;overflow:hidden"><div style="background:linear-gradient(135deg,#ec4899,#f59e0b);padding:20px;text-align:center;color:#fff"><h1 style="margin:0;font-size:22px">${BRAND}</h1><p style="margin:4px 0 0;font-size:12px;opacity:.9">Importados do Japao</p></div><div style="padding:24px;color:#333;font-size:15px;line-height:1.6">${inner}</div><div style="padding:14px;text-align:center;font-size:11px;color:#777;border-top:1px solid #eee">${BRAND} · ${MAIL_REPLY_TO} · japanexpress-store.com${optOut}</div></div>`;
+  // Documento completo (doctype, html lang, head com título, body). HTML solto, só com <div>,
+  // é um dos sinais fracos de spam que o filtro da Microsoft soma ao de remetente novo.
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>${BRAND}</title></head><body style="margin:0;padding:16px;background:#f6f6f6"><div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;background:#fff;border:1px solid #eee;border-radius:14px;overflow:hidden"><div style="background:linear-gradient(135deg,#ec4899,#f59e0b);padding:20px;text-align:center;color:#fff"><h1 style="margin:0;font-size:22px">${BRAND}</h1><p style="margin:4px 0 0;font-size:12px;opacity:.9">Importados do Japao</p></div><div style="padding:24px;color:#333;font-size:15px;line-height:1.6">${inner}</div><div style="padding:14px;text-align:center;font-size:11px;color:#777;border-top:1px solid #eee">${BRAND} · ${MAIL_REPLY_TO} · japanexpress-store.com${optOut}</div></div></body></html>`;
 }
 
 // Envio pela API HTTP do Resend (sem SMTP). Substitui o Gmail/Workspace, que
@@ -67,6 +69,8 @@ function chaveResend() {
  */
 function htmlParaTexto(html) {
   return String(html)
+    // <title> e <style> do <head> não são conteúdo: sem isto o título viraria a primeira linha do texto puro.
+    .replace(/<head[\s>][\s\S]*?<\/head>/gi, '')
     // Preserva o destino dos links: no texto puro a URL precisa aparecer, senão
     // o cliente que lê em texto fica sem o link de confirmação.
     // Link só com imagem (foto do produto) não tem rótulo: sai do texto puro em vez de virar ": url".

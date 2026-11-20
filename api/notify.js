@@ -46,7 +46,7 @@ const BUTTON_STYLE = 'display:inline-block;background:#ec4899;color:#fff;text-de
 
 async function accountTemplate(type, to, name) {
   const safeName = escapeHtml(name);
-  const salutation = safeName ? `Ola, <strong>${safeName}</strong>.` : 'Ola.';
+  const salutation = safeName ? `Olá, <strong>${safeName}</strong>.` : 'Olá.';
   if (type === 'verify') {
     const link = brandActionLink(await adminAuth().generateEmailVerificationLink(to, {
       url: `${siteOrigin()}/login?verified=1`,
@@ -57,7 +57,7 @@ async function accountTemplate(type, to, name) {
       // Confirmação de cadastro: único e-mail que sai do noreply.
       from: MAIL_FROM_NOREPLY,
       subject: 'Confirme seu e-mail - Japan Express',
-      html: wrapEmail(`<p>${salutation}</p><p>Obrigado por se cadastrar na Japan Express! Para ativar sua conta, confirme que este e-mail pertence a voce:</p><p><a href="${safeLink}" style="${BUTTON_STYLE}">Confirmar meu e-mail</a></p><p style="font-size:13px;color:#666">O botao leva para japanexpress-store.com. Se voce nao criou esta conta, ignore esta mensagem.</p>`),
+      html: wrapEmail(`<p>${salutation}</p><p>Obrigado por se cadastrar na Japan Express! Para ativar sua conta, confirme que este e-mail pertence a você:</p><p><a href="${safeLink}" style="${BUTTON_STYLE}">Confirmar meu e-mail</a></p><p style="font-size:13px;color:#666">O botão leva para japanexpress-store.com. Se você não criou esta conta, ignore esta mensagem.</p>`),
     };
   }
   if (type === 'reset') {
@@ -68,7 +68,7 @@ async function accountTemplate(type, to, name) {
     const safeLink = escapeHtml(link);
     return {
       subject: 'Redefinir sua senha - Japan Express',
-      html: wrapEmail(`<p>${salutation}</p><p>Recebemos um pedido para redefinir a senha da sua conta.</p><p><a href="${safeLink}" style="${BUTTON_STYLE}">Criar nova senha</a></p><p style="font-size:13px;color:#666">O botao leva para japanexpress-store.com e vale por tempo limitado. Se voce nao pediu isso, ignore esta mensagem: sua senha atual continua valendo.</p>`),
+      html: wrapEmail(`<p>${salutation}</p><p>Recebemos um pedido para redefinir a senha da sua conta.</p><p><a href="${safeLink}" style="${BUTTON_STYLE}">Criar nova senha</a></p><p style="font-size:13px;color:#666">O botão leva para japanexpress-store.com e vale por tempo limitado. Se você não pediu isso, ignore esta mensagem: sua senha atual continua valendo.</p>`),
     };
   }
   return {
