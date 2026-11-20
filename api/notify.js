@@ -18,31 +18,57 @@ import { buildOrderEmail, MAIL_FROM_NOREPLY, sendMail, siteOrigin, unsubscribeUr
 import { sendPush } from './_lib/push.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
 
+/**
+ * Troca o link do Firebase (`https://localstorage-98492.firebaseapp.com/__/auth/action?...`,
+ * enorme e com o ID técnico do projeto) por um link curto no domínio da loja:
+ * `https://japanexpress-store.com/conta/acao?mode=...&oobCode=...`.
+ *
+ * Só `mode` e `oobCode` importam: a página `/conta/acao` sabe para onde levar o
+ * cliente em cada caso, e a apiKey já está no app. Link sem esses dois campos
+ * volta intacto, para nunca mandar um e-mail com link quebrado.
+ */
+export function brandActionLink(firebaseLink) {
+  try {
+    const original = new URL(firebaseLink);
+    const mode = original.searchParams.get('mode');
+    const oobCode = original.searchParams.get('oobCode');
+    if (!mode || !oobCode) return firebaseLink;
+    const branded = new URL('/conta/acao', siteOrigin());
+    branded.searchParams.set('mode', mode);
+    branded.searchParams.set('oobCode', oobCode);
+    return branded.toString();
+  } catch {
+    return firebaseLink;
+  }
+}
+
+const BUTTON_STYLE = 'display:inline-block;background:#ec4899;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:bold';
+
 async function accountTemplate(type, to, name) {
   const safeName = escapeHtml(name);
   const salutation = safeName ? `Ola, <strong>${safeName}</strong>.` : 'Ola.';
   if (type === 'verify') {
-    const link = await adminAuth().generateEmailVerificationLink(to, {
+    const link = brandActionLink(await adminAuth().generateEmailVerificationLink(to, {
       url: `${siteOrigin()}/login?verified=1`,
       handleCodeInApp: false,
-    });
+    }));
     const safeLink = escapeHtml(link);
     return {
       // Confirmação de cadastro: único e-mail que sai do noreply.
       from: MAIL_FROM_NOREPLY,
       subject: 'Confirme seu e-mail - Japan Express',
-      html: wrapEmail(`<p>${salutation}</p><p>Confirme que este e-mail pertence a voce:</p><p><a href="${safeLink}" style="display:inline-block;background:#ec4899;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:bold">Confirmar meu e-mail</a></p><p style="word-break:break-all">${safeLink}</p><p>Se voce nao criou esta conta, ignore esta mensagem.</p>`),
+      html: wrapEmail(`<p>${salutation}</p><p>Obrigado por se cadastrar na Japan Express! Para ativar sua conta, confirme que este e-mail pertence a voce:</p><p><a href="${safeLink}" style="${BUTTON_STYLE}">Confirmar meu e-mail</a></p><p style="font-size:13px;color:#666">O botao leva para japanexpress-store.com. Se voce nao criou esta conta, ignore esta mensagem.</p>`),
     };
   }
   if (type === 'reset') {
-    const link = await adminAuth().generatePasswordResetLink(to, {
+    const link = brandActionLink(await adminAuth().generatePasswordResetLink(to, {
       url: `${siteOrigin()}/login`,
       handleCodeInApp: false,
-    });
+    }));
     const safeLink = escapeHtml(link);
     return {
       subject: 'Redefinir sua senha - Japan Express',
-      html: wrapEmail(`<p>${salutation}</p><p>Recebemos um pedido para redefinir a senha da sua conta.</p><p><a href="${safeLink}" style="display:inline-block;background:#ec4899;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:bold">Criar nova senha</a></p><p style="word-break:break-all">${safeLink}</p><p>O link vale por tempo limitado. Se voce nao pediu isso, ignore esta mensagem: sua senha atual continua valendo.</p>`),
+      html: wrapEmail(`<p>${salutation}</p><p>Recebemos um pedido para redefinir a senha da sua conta.</p><p><a href="${safeLink}" style="${BUTTON_STYLE}">Criar nova senha</a></p><p style="font-size:13px;color:#666">O botao leva para japanexpress-store.com e vale por tempo limitado. Se voce nao pediu isso, ignore esta mensagem: sua senha atual continua valendo.</p>`),
     };
   }
   return {

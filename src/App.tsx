@@ -40,6 +40,7 @@ const OrderReview      = lazy(() => import("./pages/OrderReview"));
 const OrderConfirmation= lazy(() => import("./pages/OrderConfirmation"));
 const Register         = lazy(() => import("./pages/Register"));
 const Login            = lazy(() => import("./pages/Login"));
+const AuthAction       = lazy(() => import("./pages/AuthAction"));
 const Profile          = lazy(() => import("./pages/Profile"));
 const Shipping         = lazy(() => import("./pages/Shipping"));
 const Offers           = lazy(() => import("./pages/Offers"));
@@ -184,6 +185,7 @@ const FullApp: React.FC = () => (
                 <Route path="/order-confirmation" element={<OrderConfirmation />} />
                 <Route path="/cadastro" element={<Register />} />
                 <Route path="/login" element={<Login />} />
+                <Route path="/conta/acao" element={<AuthAction />} />
                 <Route path="/perfil" element={<Profile />} />
                 <Route path="/frete" element={<Shipping />} />
                 <Route path="/ofertas" element={<Offers />} />
