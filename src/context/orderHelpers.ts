@@ -1,6 +1,44 @@
 import type { Order } from '@/context/userTypes';
 
-export const normalizeStoredOrder = (order: any): Order | null => {
+/**
+ * Pedido como vem do localStorage ou do Firestore: o app gravou pedidos em formatos diferentes ao longo do
+ * tempo (`orderDate`/`date`, `totalAmount`/`totalPrice`/`total`, `name`/`productName`...), então todos os campos
+ * são opcionais e `normalizeStoredOrder` entrega o formato atual (`Order`).
+ */
+export interface StoredOrder extends Omit<Partial<Order>, 'items'> {
+  syncedAt?: string;
+  totalPrice?: number | string;
+  total?: number | string;
+  shippingCost?: number | string;
+  shippingCarrier?: string;
+  name?: string;
+  postalCode?: string;
+  prefecture?: string;
+  city?: string;
+  address?: string;
+  building?: string;
+  items?: Array<{
+    productName?: string;
+    name?: string;
+    productId?: string;
+    size?: string;
+    quantity?: number | string;
+    price?: number | string;
+    unitYen?: number;
+    freeGift?: boolean;
+  }>;
+  [key: string]: unknown;
+}
+
+/** O que `fixTrackingUrl` lê e reescreve: rastreio e transportadora. */
+interface TrackedOrder {
+  trackingNumber?: string;
+  trackingUrl?: string;
+  carrier?: string;
+  shipping?: { carrier?: string };
+}
+
+export const normalizeStoredOrder = (order: StoredOrder | null | undefined): Order | null => {
   if (!order) return null;
   const statusText = String(order.status || '').toLowerCase();
   const status =
@@ -16,7 +54,7 @@ export const normalizeStoredOrder = (order: any): Order | null => {
     orderNumber: order.orderNumber || order.id,
     date: order.orderDate || order.date || order.syncedAt || new Date().toISOString(),
     items: Array.isArray(order.items)
-      ? order.items.map((item: any) => ({
+      ? order.items.map((item) => ({
           productName: item.productName || item.name || item.productId || 'Produto',
           size: item.size || '',
           quantity: Number(item.quantity) || 1,
@@ -42,7 +80,7 @@ export const normalizeStoredOrder = (order: any): Order | null => {
 };
 
 // Helper: fix old tracking URLs to use the correct format (direct results)
-export const fixTrackingUrl = (order: any): any => {
+export const fixTrackingUrl = <T extends TrackedOrder>(order: T): T => {
   const trackingNumber = order.trackingNumber;
   const savedUrl = order.trackingUrl || '';
   let carrier = order.carrier || order.shipping?.carrier || '';

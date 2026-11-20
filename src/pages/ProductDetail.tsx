@@ -91,6 +91,8 @@ const ProductDetail: React.FC = () => {
     let cancelled = false;
     reviewService.getProductRating(product.id).then((r) => { if (!cancelled) setProductRating(r); });
     return () => { cancelled = true; };
+  // Só quando o ID do produto muda: o objeto `product` troca de identidade a cada atualização do catálogo e repetiria a ação (evento de visualização, nota, quantidade).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.id]);
 
   // Reseta a quantidade se o produto trocar para um com estoque menor do que
@@ -101,6 +103,8 @@ const ProductDetail: React.FC = () => {
     if (!product) return;
     const max = getMaxQty(product);
     if (Number.isFinite(max)) setQuantity((q) => Math.max(0, Math.min(q, max)));
+  // Só quando o ID do produto muda: o objeto `product` troca de identidade a cada atualização do catálogo e repetiria a ação (evento de visualização, nota, quantidade).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.id]);
 
   // SEO: cada produto ganha título/descrição/imagem/canonical próprios.
@@ -135,6 +139,8 @@ const ProductDetail: React.FC = () => {
       });
       recentlyViewed.track(product.id);
     }
+  // Só quando o ID do produto muda: o objeto `product` troca de identidade a cada atualização do catálogo e repetiria a ação (evento de visualização, nota, quantidade).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.id]);
 
   // Enquanto os produtos carregam, evita piscar "não encontrado".

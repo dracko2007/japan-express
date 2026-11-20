@@ -217,7 +217,7 @@ const ProfilePersonalInfo: React.FC<ProfilePersonalInfoProps> = ({
               onChange={(e) => setEditedUser(prev => ({
                 ...prev,
                 // Troca o país e limpa estado/cidade pra evitar mistura de listas.
-                address: { ...prev.address, country: e.target.value, prefecture: '', city: '' } as any,
+                address: { ...prev.address, country: e.target.value, prefecture: '', city: '' },
               }))}
               className="w-full p-3 rounded-lg border border-border bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary transition"
             >

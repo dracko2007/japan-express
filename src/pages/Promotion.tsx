@@ -5,6 +5,7 @@ import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/context/CartContext';
 import { useProducts } from '@/context/ProductsContext';
+import type { Product } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/config/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
@@ -174,7 +175,7 @@ const Promotion: React.FC = () => {
         discountPercent: 0,
         promoLimit: promo.limitPerPerson, // max qty no carrinho para este item promo
       };
-      addToCart(promoItem as any, 'small', promoQty);
+      addToCart(promoItem as Product, 'small', promoQty);
     }
 
     // Adiciona excedente com preço original

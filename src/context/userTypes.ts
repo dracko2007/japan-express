@@ -25,6 +25,8 @@ export interface UserProfile {
     city: string;
     address: string;
     building?: string;
+    /** País do endereço (cliente de fora do Brasil/Japão escolhe na edição do perfil). */
+    country?: string;
   };
   createdAt: string;
   coupons?: Coupon[]; // Cupons do perfil (sincronizados no Firestore)
@@ -81,6 +83,19 @@ export interface Order {
   totalAmount: number;
   paymentMethod: string;
   status: 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
+  /** Moeda do pedido (BRL, USD, EUR, JPY). Ausente em pedido antigo: vale JPY. */
+  currency?: string;
+  /** Total em ¥ (venda manual e pedidos com conversão). */
+  grandTotalYen?: number;
+  couponCode?: string;
+  appliedCoupon?: { code?: string };
+  /** Desconto do cupom (legado, sem `priceBreakdown`). */
+  couponDiscount?: number;
+  /** A conta do pedido na moeda do pedido, gravada pelo servidor (`shared/money.js`). */
+  priceBreakdown?: {
+    subtotal?: number; couponDiscount?: number; pointsDiscount?: number; psFee?: number;
+    shipping?: number; importDuty?: number; pixIof?: number; pixBankFee?: number;
+  };
   trackingNumber?: string;
   trackingUrl?: string;
   carrier?: string;
@@ -127,7 +142,7 @@ export interface UserContextType {
   useCoupon: (couponId: string) => void;
   consumeCouponByCode: (code: string) => void;
   validateProfileCoupon: (code: string, orderTotalYen?: number) => { valid: boolean; coupon?: Coupon; error?: string };
-  addOrder: (order: Omit<Order, 'id' | 'date'> & { orderNumber?: string }) => Promise<void> | void;
+  addOrder: (order: Omit<Order, 'id' | 'date'> & { orderNumber?: string; customerEmail?: string; customerName?: string }) => Promise<void> | void;
   clearOrderHistory: () => void;
   refreshOrders: () => Promise<void>;
   /** `true` quando a leitura dos pedidos no servidor falhou e o que está na

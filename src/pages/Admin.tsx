@@ -184,6 +184,8 @@ const Admin: React.FC = () => {
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', debouncedRefresh);
     };
+  // Carrega os pedidos uma vez ao abrir o painel; `loadOrders` é recriada a cada render e listá-la repetiria a leitura.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, navigate, authReady]);
 
   useEffect(() => {

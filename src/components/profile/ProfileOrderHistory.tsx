@@ -83,7 +83,7 @@ const ProfileOrderHistory: React.FC<ProfileOrderHistoryProps> = ({
             // Pago = admin confirmou (paymentConfirmed) OU status já avançou além de pending.
             // Se o pedido está em confirmed/packing/shipped/delivered, o pagamento já foi recebido.
             const advancedStatuses = ['confirmed', 'processing', 'packing', 'shipped', 'delivered'];
-            const isPaid = !!(order as any).paymentConfirmed || advancedStatuses.includes(order.status as string);
+            const isPaid = !!order.paymentConfirmed || advancedStatuses.includes(order.status as string);
             return (
             <div
               key={order.id}
@@ -104,9 +104,9 @@ const ProfileOrderHistory: React.FC<ProfileOrderHistoryProps> = ({
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-lg text-foreground">
-                    {(order as any).grandTotalYen && (order as any).currency !== 'JPY'
-                      ? `${formatPrice(order.totalAmount, (order as any).currency || 'BRL', true)} (¥ ${((order as any).grandTotalYen as number).toLocaleString()})`
-                      : formatPrice(order.totalAmount, (order as any).currency || 'JPY')}
+                    {order.grandTotalYen && order.currency !== 'JPY'
+                      ? `${formatPrice(order.totalAmount, order.currency || 'BRL', true)} (¥ ${(order.grandTotalYen as number).toLocaleString()})`
+                      : formatPrice(order.totalAmount, order.currency || 'JPY')}
                   </p>
                   <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
                     order.status === 'delivered' ? 'bg-green-100 text-green-800' :
@@ -129,7 +129,7 @@ const ProfileOrderHistory: React.FC<ProfileOrderHistoryProps> = ({
 
               {/* Acompanhamento do pedido — sempre visível */}
               {(() => {
-                const hasTracking = !!(order as any).trackingNumber;
+                const hasTracking = !!order.trackingNumber;
                 const st = order.status as string;
                 const steps = ['Pagamento', 'Preparando', 'Enviado', 'Entregue'];
                 // Estado de cada etapa: 'done' (✓) | 'active' (atual) | 'pending' (futura).
@@ -199,10 +199,10 @@ const ProfileOrderHistory: React.FC<ProfileOrderHistoryProps> = ({
               )}
 
               {/* Tracking Info — shown whenever a tracking number exists */}
-              {(order as any).trackingNumber && (() => {
-                const trackingNumber = ((order as any).trackingNumber as string).trim();
-                const savedUrl = (order as any).trackingUrl || '';
-                let carrierRaw = (order as any).carrier || (order as any).shipping?.carrier || '';
+              {order.trackingNumber && (() => {
+                const trackingNumber = (order.trackingNumber as string).trim();
+                const savedUrl = order.trackingUrl || '';
+                let carrierRaw = order.carrier || order.shipping?.carrier || '';
 
                 // Detect carrier from saved URL if not set
                 if (!carrierRaw && savedUrl) {
@@ -303,8 +303,8 @@ const ProfileOrderHistory: React.FC<ProfileOrderHistoryProps> = ({
                       )}
                       <span className="font-medium shrink-0">
                         {item.price != null
-                          ? formatPrice(item.price * item.quantity, (order as any).currency || 'JPY')
-                          : formatPrice(((item as any).unitYen || 0) * item.quantity, 'JPY')}
+                          ? formatPrice(item.price * item.quantity, order.currency || 'JPY')
+                          : formatPrice((item.unitYen || 0) * item.quantity, 'JPY')}
                       </span>
                     </div>
                   );
@@ -317,23 +317,18 @@ const ProfileOrderHistory: React.FC<ProfileOrderHistoryProps> = ({
                 // `buildQuote`) já vem convertido para `order.currency` — fonte de
                 // verdade. Pedidos legados (venda manual, sem priceBreakdown) caem no
                 // cálculo antigo a partir de `item.price` (que ali já é local).
-                const pb = (order as any).priceBreakdown as
-                  | {
-                      subtotal?: number; couponDiscount?: number; pointsDiscount?: number; psFee?: number;
-                      shipping?: number; importDuty?: number; pixIof?: number; pixBankFee?: number;
-                    }
-                  | undefined;
+                const pb = order.priceBreakdown;
                 const itemsSubtotal = pb?.subtotal ?? order.items.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0);
                 const discount = pb
                   ? (pb.couponDiscount || 0)
-                  : ((order as any).couponDiscount || (itemsSubtotal > order.totalAmount ? itemsSubtotal - order.totalAmount : 0));
+                  : (order.couponDiscount || (itemsSubtotal > order.totalAmount ? itemsSubtotal - order.totalAmount : 0));
                 const psFee = pb?.psFee || 0;
-                const shippingData = (order as any).shipping;
+                const shippingData = order.shipping;
                 // Pedido novo: frete já na moeda do pedido (`pb.shipping`). Legado: ¥.
                 const shippingCost = pb?.shipping ?? shippingData?.cost ?? null;
                 const carrierName = shippingData?.carrier || '';
-                const couponCode = (order as any).couponCode || (order as any).appliedCoupon?.code || '';
-                const oc = (order as any).currency || 'JPY';
+                const couponCode = order.couponCode || order.appliedCoupon?.code || '';
+                const oc = order.currency || 'JPY';
                 const shippingCurrency = pb?.shipping != null ? oc : 'JPY';
                 const pointsDiscount = pb?.pointsDiscount || 0;
                 const importDuty = pb?.importDuty || 0;
@@ -390,8 +385,8 @@ const ProfileOrderHistory: React.FC<ProfileOrderHistoryProps> = ({
                     <div className="flex justify-between font-semibold pt-1 border-t border-border">
                       <span>{t('profile.orders.total')}</span>
                       <span className="text-primary">
-                        {(order as any).grandTotalYen && oc !== 'JPY'
-                          ? `${formatPrice(order.totalAmount, oc, true)} (¥ ${((order as any).grandTotalYen as number).toLocaleString()})`
+                        {order.grandTotalYen && oc !== 'JPY'
+                          ? `${formatPrice(order.totalAmount, oc, true)} (¥ ${(order.grandTotalYen as number).toLocaleString()})`
                           : formatPrice(order.totalAmount, oc)}
                       </span>
                     </div>
@@ -439,7 +434,7 @@ const ProfileOrderHistory: React.FC<ProfileOrderHistoryProps> = ({
                           <h1>Comprovante de Pedido</h1>
                           <p><strong>Número:</strong> ${order.orderNumber}</p>
                           <p><strong>Data:</strong> ${new Date(order.date).toLocaleDateString('pt-BR')}</p>
-                          <p><strong>Total:</strong> ${formatPrice(order.totalAmount, (order as any).currency || 'JPY')}</p>
+                          <p><strong>Total:</strong> ${formatPrice(order.totalAmount, order.currency || 'JPY')}</p>
                           <p><strong>Status do Pagamento:</strong> ${isPaid ? '✅ Pago' : '⏳ Pendente'}</p>
                           <button onclick="window.print()">Imprimir</button>
                           </body></html>

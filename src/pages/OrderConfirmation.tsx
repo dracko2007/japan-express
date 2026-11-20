@@ -22,6 +22,17 @@ import ChangeToCard from '@/components/checkout/ChangeToCard';
 // que não pode é cada tela escolher o seu, que foi como divergiram.
 const { international: WHATSAPP, domestic: PAYPAY_ID } = COMPANY_PROFILE.whatsapp;
 
+/** Linha do pedido como chega em `location.state.order` (campos de formatos diferentes do app). */
+interface ConfirmationItem {
+  name?: string;
+  productName?: string;
+  image?: string;
+  size?: string;
+  quantity: number;
+  price: number;
+  freeGift?: boolean;
+}
+
 const OrderConfirmation: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -543,7 +554,7 @@ const OrderConfirmation: React.FC = () => {
                     {t('order.items')}
                   </h4>
                   <div className="space-y-3">
-                    {order.items.map((item: any, idx: number) => (
+                    {order.items.map((item: ConfirmationItem, idx: number) => (
                       <div key={idx} className="flex justify-between items-center text-xs md:text-sm border-b border-gray-100 pb-2 last:border-0">
                         <div className="flex items-center gap-2 flex-1 min-w-0">
                           {item.image && (

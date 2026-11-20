@@ -17,7 +17,7 @@ const Register: React.FC = () => {
   const location = useLocation();
   const { toast } = useToast();
   const { register: registerUser, isAuthenticated, authReady } = useUser();
-  const redirectTo = (location.state as any)?.from || '/perfil';
+  const redirectTo = (location.state as { from?: string } | null)?.from || '/perfil';
   const { t, selectedCountry } = useLanguage();
 
   const [formData, setFormData] = useState({
@@ -337,7 +337,7 @@ const Register: React.FC = () => {
                       <button
                         key={opt.value}
                         type="button"
-                        onClick={() => setFormData(p => ({ ...p, gender: p.gender === opt.value ? '' : opt.value as any }))}
+                        onClick={() => setFormData(p => ({ ...p, gender: p.gender === opt.value ? '' : opt.value as 'masculino' | 'feminino' | 'outro' }))}
                         className={`py-2 rounded-lg border-2 text-xs font-semibold transition-colors ${formData.gender === opt.value ? 'border-primary bg-primary/5 text-primary' : 'border-border text-muted-foreground hover:border-gray-300'}`}
                       >
                         {opt.label}

@@ -62,10 +62,11 @@ export const useMaintenanceMode = () => {
       });
       // onSnapshot atualiza isEnabled automaticamente
       return { ok: true, newState };
-    } catch (e: any) {
-      const msg = e?.code === 'permission-denied'
+    } catch (e) {
+      const erro = e as { code?: string; message?: string } | null;
+      const msg = erro?.code === 'permission-denied'
         ? 'Permissão negada — verifique se está logado como admin no Firebase'
-        : String(e?.message || e);
+        : String(erro?.message || e);
       return { ok: false, newState: isEnabled, error: msg };
     }
   };

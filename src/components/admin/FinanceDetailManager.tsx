@@ -147,6 +147,8 @@ const FinanceDetailManager: React.FC = () => {
     }
   };
 
+  // Carrega o resumo uma vez ao abrir; `loadResumo` é recriada a cada render e listá-la repetiria as leituras.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void loadResumo(); }, []);
 
   const toYenSum = (items: { amount: number; currency: 'BRL' | 'JPY' }[]) =>

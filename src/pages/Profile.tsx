@@ -6,7 +6,7 @@ import { negotiationService } from '@/services/negotiationService';
 import type { Negotiation } from '@/types/negotiation';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
-import { useUser, UserProfile } from '@/context/UserContext';
+import { useUser, UserProfile, type Order } from '@/context/UserContext';
 import { useCart } from '@/context/CartContext';
 import { useToast } from '@/hooks/use-toast';
 import { prefectures } from '@/data/prefectures';
@@ -134,7 +134,7 @@ const Profile: React.FC = () => {
 
   // País do ENDEREÇO (independente do idioma do site). Define qual busca de CEP
   // e qual lista de estados/províncias usar.
-  const addressCountry = (editedUser.address as any)?.country || selectedCountry || 'Brasil';
+  const addressCountry = editedUser.address?.country || selectedCountry || 'Brasil';
   const EUROPE = ['Portugal', 'França', 'Itália', 'Espanha', 'Alemanha'];
   const isJapanAddress = addressCountry === 'Japão';
   const isBrazilAddress = addressCountry === 'Brasil';
@@ -208,6 +208,8 @@ const Profile: React.FC = () => {
 
   // Negociações do usuário
   // Refresh orders from localStorage on mount so tracking updates from admin are visible
+  // Atualiza os pedidos uma vez ao abrir o perfil; `refreshOrders` é recriada a cada render e listá-la repetiria a leitura.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void refreshOrders(); }, []);
 
   const [negotiations, setNegotiations] = useState<Negotiation[]>([]);
@@ -236,13 +238,13 @@ const Profile: React.FC = () => {
   };
 
   // Função para recomprar um pedido
-  const handleReorder = (order: any) => {
+  const handleReorder = (order: Order) => {
     clearCart();
     
     let itemsAdded = 0;
     
     // Adiciona todos os itens do pedido ao carrinho
-    order.items.forEach((item: any) => {
+    order.items.forEach((item) => {
       // Busca o produto original pelo nome
       const product = products.find(p => p.name === item.productName);
       

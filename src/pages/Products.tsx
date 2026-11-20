@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { Search, X, SlidersHorizontal, ChevronDown, Eye, EyeOff, Menu, ShoppingCart, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
@@ -51,8 +51,9 @@ const Products: React.FC = () => {
   useEffect(() => { categoryService.getAll().then(setAllCategories).catch(() => {}); }, []);
 
   const getCatIcon = (id: string) => allCategories.find(c => c.id === id)?.icon || CATEGORY_ICONS[id] || '🛍️';
-  const getCategoryLabel = (id: string) =>
-    allCategories.find(c => c.id === id)?.label || t(`product.category.${id}`) || id;
+  const getCategoryLabel = useCallback((id: string) =>
+    allCategories.find(c => c.id === id)?.label || t(`product.category.${id}`) || id,
+  [allCategories, t]);
   const getCategoryDesc = (id: string) => {
     const descs: Record<string, Record<string, string>> = {
       pt: {
@@ -166,7 +167,7 @@ const Products: React.FC = () => {
   const availableCats = useMemo(() =>
     Array.from(new Set(visible.map(p => p.category)))
       .sort((a, b) => getCategoryLabel(a).localeCompare(getCategoryLabel(b))),
-    [visible, language, allCategories]);
+    [visible, getCategoryLabel]);
 
   // Tipos disponíveis (tags) — mostra sempre que existam tags na lista atual
   const availableTypes = useMemo(() => {

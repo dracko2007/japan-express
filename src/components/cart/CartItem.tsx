@@ -44,7 +44,7 @@ const CartItemComponent: React.FC<CartItemProps> = ({ item, couponDiscount = 0, 
   const finalPrice = unitPrice * item.quantity;
   const originalTotalPrice = originalPrice * item.quantity;
   const stockMax = item.product.stock && !item.product.stock.unlimited ? item.product.stock.quantity : Infinity;
-  const promoMax = isPromo ? ((item.product as any).promoLimit ?? 1) : Infinity;
+  const promoMax = isPromo ? (item.product.promoLimit ?? 1) : Infinity;
   const maxQty = Math.min(stockMax, promoMax);
   const atStockLimit = item.quantity >= maxQty;
   const atPromoLimit = isPromo && item.quantity >= promoMax;

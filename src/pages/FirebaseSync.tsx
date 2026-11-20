@@ -3,7 +3,11 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { db as firebaseDb, auth as firebaseAuth } from '@/config/firebase';
 import { firebaseSyncService } from '@/services/firebaseSyncService';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, type Firestore } from 'firebase/firestore';
+import type { Auth } from 'firebase/auth';
+
+/** Mensagem de um erro capturado (o `catch` entrega `unknown`). */
+const messageOf = (error: unknown): string => (error instanceof Error ? messageOf(error) : String(error));
 
 const isDev = import.meta.env.DEV;
 const devLog = isDev ? console.log.bind(console) : () => {};
@@ -11,14 +15,23 @@ const devWarn = isDev ? console.warn.bind(console) : () => {};
 const devError = isDev ? console.error.bind(console) : () => {};
 
 
+/** Cadastro de cliente como fica no localStorage (`japan-express-users`). */
+interface StoredUser {
+  id?: string;
+  name?: string;
+  orders?: Array<{ orderNumber?: string }>;
+}
+
 export default function FirebaseSync() {
   const [logs, setLogs] = useState<Array<{ time: string; message: string; color: string }>>([]);
   const [status, setStatus] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
-  const [db, setDb] = useState<any>(null);
-  const [auth, setAuth] = useState<any>(null);
+  const [db, setDb] = useState<Firestore | null>(null);
+  const [auth, setAuth] = useState<Auth | null>(null);
 
   useEffect(() => {
     initializeFirebase();
+  // Inicializa uma vez ao abrir a tela; `initializeFirebase` é recriada a cada render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const initializeFirebase = async () => {
@@ -31,8 +44,8 @@ export default function FirebaseSync() {
 
       addLog('✅ Firebase inicializado com sucesso', '#22c55e');
       setTimeout(() => testConnection(firebaseDb), 500);
-    } catch (error: any) {
-      addLog('❌ Erro ao inicializar Firebase: ' + error.message, '#ef4444');
+    } catch (error) {
+      addLog('❌ Erro ao inicializar Firebase: ' + messageOf(error), '#ef4444');
     }
   };
 
@@ -50,7 +63,7 @@ export default function FirebaseSync() {
     addLog('Logs limpos');
   };
 
-  const testConnection = async (dbInstance?: any) => {
+  const testConnection = async (dbInstance?: Firestore | null) => {
     const database = dbInstance || db;
     if (!database) {
       addLog('❌ Firebase não inicializado', '#ef4444');
@@ -76,9 +89,9 @@ export default function FirebaseSync() {
 
       showStatus('✅ Conexão com Firebase OK! Pronto para migrar dados.', 'success');
       addLog('✅ Teste completo!', '#22c55e');
-    } catch (error: any) {
-      addLog('❌ Erro: ' + error.message, '#ef4444');
-      showStatus('❌ Erro na conexão: ' + error.message, 'error');
+    } catch (error) {
+      addLog('❌ Erro: ' + messageOf(error), '#ef4444');
+      showStatus('❌ Erro na conexão: ' + messageOf(error), 'error');
     }
   };
 
@@ -104,9 +117,9 @@ export default function FirebaseSync() {
         `${migratedUsers} usuários e ${migratedOrders} pedidos migrados para a nuvem.`,
         'success',
       );
-    } catch (error: any) {
-      addLog('Erro na migração: ' + error.message, '#ef4444');
-      showStatus('Erro na migração: ' + error.message, 'error');
+    } catch (error) {
+      addLog('Erro na migração: ' + messageOf(error), '#ef4444');
+      showStatus('Erro na migração: ' + messageOf(error), 'error');
       devError(error);
     }
   };
@@ -122,14 +135,14 @@ export default function FirebaseSync() {
       const userCount = Object.keys(users).length;
       addLog(`👥 Total de usuários: ${userCount}`, '#22c55e');
       
-      Object.entries(users).forEach(([email, userData]: [string, any]) => {
+      Object.entries(users as Record<string, StoredUser>).forEach(([email, userData]) => {
         addLog(`  - Email: ${email}`, '#06b6d4');
         addLog(`    Nome: ${userData.name || 'N/A'}`, '#06b6d4');
         addLog(`    ID: ${userData.id || 'N/A'}`, '#06b6d4');
         addLog(`    Pedidos: ${userData.orders?.length || 0}`, '#22c55e');
         
         if (userData.orders && userData.orders.length > 0) {
-          userData.orders.forEach((order: any, idx: number) => {
+          userData.orders.forEach((order, idx) => {
             addLog(`      └─ Pedido ${idx + 1}: ${order.orderNumber || 'N/A'}`, '#f59e0b');
           });
         }
@@ -167,9 +180,9 @@ export default function FirebaseSync() {
       });
 
       showStatus(`✅ ${usersSnapshot.size} usuários e ${ordersSnapshot.size} pedidos na nuvem!`, 'success');
-    } catch (error: any) {
-      addLog('❌ Erro: ' + error.message, '#ef4444');
-      showStatus('❌ Erro ao buscar dados: ' + error.message, 'error');
+    } catch (error) {
+      addLog('❌ Erro: ' + messageOf(error), '#ef4444');
+      showStatus('❌ Erro ao buscar dados: ' + messageOf(error), 'error');
     }
   };
 
