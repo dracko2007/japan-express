@@ -2,7 +2,7 @@
  * Reserva de unidade da promoção da home entre criar o pedido e confirmar o
  * pagamento.
  *
- * O problema (resto do CRÍTICO 3 do AUDITORIA.md): `buildQuote` já desconta
+ * O problema (resto do CRÍTICO 3 do docs/AUDITORIA.md): `buildQuote` já desconta
  * `homePromotion.reservedCount` do saldo da promoção, mas ninguém gravava esse
  * campo. Dois checkouts simultâneos na última unidade liam o mesmo
  * `soldCount`, os dois passavam na cotação, os dois eram cobrados — e o

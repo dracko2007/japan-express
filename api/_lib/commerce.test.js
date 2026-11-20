@@ -93,7 +93,7 @@ describe('authoritative checkout quote', () => {
     expect(() => quote({ carrier: 'kozutsumi-air' })).toThrowError('invalid_shipping');
   });
 
-  // Regressão do CRÍTICO #1 do AUDITORIA.md: o cupom de recuperação de
+  // Regressão do CRÍTICO #1 do docs/AUDITORIA.md: o cupom de recuperação de
   // carrinho grava o percentual em `discountPercent` e deixa `discount: 0`
   // (legado). Lendo `discount` no ramo 'percentage', todo cupom de
   // recuperação valia 0% — a tela prometia 30% OFF e o pedido saía cheio.
@@ -137,7 +137,7 @@ describe('authoritative checkout quote', () => {
     expect(result.homePromoQuantity).toBe(2);
   });
 
-  // Regressão do MEDIO 1 do AUDITORIA.md: o `fulfillment.js` somava
+  // Regressão do MEDIO 1 do docs/AUDITORIA.md: o `fulfillment.js` somava
   // `order.promoPoints` no saldo do cliente, mas nenhum lugar gravava esse
   // campo. A campanha "Compre e Ganhe pontos" era anunciada por e-mail e push
   // e creditava zero.
@@ -171,7 +171,7 @@ describe('authoritative checkout quote', () => {
     expect(quote().promoPoints).toBe(0);
   });
 
-  // Regressão do BAIXO 1 do AUDITORIA.md: produtos, frete e subtotal eram
+  // Regressão do BAIXO 1 do docs/AUDITORIA.md: produtos, frete e subtotal eram
   // convertidos cada um por conta própria, com cushion de 4% mais ¥5 de buffer
   // por linha, enquanto cupom, pontos e taxa PS iam pela taxa exata. O cushion
   // nunca alcançava os descontos, então a conta da tela ficava 4% dos descontos

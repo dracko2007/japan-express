@@ -4,7 +4,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Raiz do projeto (este arquivo fica em scripts/legacy/).
+const __dirname = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 console.log('🖼️  Atualizando produtos com imagens locais...\n');
 

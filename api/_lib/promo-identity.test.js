@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { indiceDePessoaId, promoUsageId } from './promo-identity.js';
 
-// Regressão do MEDIO 3 do AUDITORIA.md: os limites de promoção eram ancorados
+// Regressão do MEDIO 3 do docs/AUDITORIA.md: os limites de promoção eram ancorados
 // só no CPF, que é opcional no checkout. Cliente de fora do Brasil não informa
 // CPF, e para ele os guardas viravam `null` — a promoção não tinha limite.
 

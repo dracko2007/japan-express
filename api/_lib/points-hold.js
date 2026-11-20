@@ -1,7 +1,7 @@
 /**
  * Reserva de pontos entre criar o pedido e confirmar o pagamento.
  *
- * O problema (MEDIO 2 do AUDITORIA.md): a checagem de saldo acontecia FORA de
+ * O problema (MEDIO 2 do docs/AUDITORIA.md): a checagem de saldo acontecia FORA de
  * transação, e o débito só no `fulfillOrder`. Dois checkouts simultâneos liam
  * o mesmo saldo, os dois passavam, os dois eram cobrados — e o segundo estourava
  * `insufficient_points` já com o cartão debitado.
