@@ -262,7 +262,7 @@ export function checkoutErrorMessage(code: string): string {
     invalid_cpf: 'CPF inválido. Confira os 11 dígitos.',
     cpf_required: 'Informe o CPF do destinatário: a alfândega do Brasil exige.',
     recovery_link_required: 'Este cupom só vale pelo botão do e-mail de recuperação de carrinho. Abra o e-mail e toque em "Voltar ao carrinho".',
-    recovery_window_closed: 'O prazo do cupom acabou (vale por 2 horas depois de abrir o e-mail). Volte ao carrinho e siga sem o cupom.',
+    recovery_window_closed: 'O prazo do cupom acabou (vale por 24 horas depois de abrir o e-mail). Volte ao carrinho e siga sem o cupom.',
     recovery_coupon_cpf_used: 'O cupom de recuperação vale uma vez só e já foi usado neste CPF (ou conta). Remova o cupom e tente de novo.',
     order_not_payable: 'Este pedido já foi pago ou não aceita mais pagamento.',
     payment_change_unavailable: 'Este pedido não permite trocar a forma de pagamento. Fale com a loja pelo WhatsApp.',

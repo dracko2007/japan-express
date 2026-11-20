@@ -35,14 +35,15 @@ async function garantirCupom(uid, email, abandonedAt, discount, validadeMs) {
     discount: 0,               // legado: o valor real fica em discountPercent
     discountPercent: discount,
     description: `Recuperacao de carrinho — ${discount}% OFF no pedido`,
-    // Chance única: só vale depois de abrir o link do e-mail, por 2 h, uma vez por CPF
+    // Chance única: só vale depois de abrir o link do e-mail, por 24 h, uma vez por CPF
     // (`_lib/recovery-coupon.js`). Renovar o documento nunca reabre a janela.
     recovery: true,
     recoveryOwnerUid: uid,
     recoveryWindowMs: RECOVERY_WINDOW_MS,
     // Como o documento é individual, renovar este prazo nunca reabre o cupom
     // de outra pessoa.
-    expiryDate: new Date(expiraEm).toISOString(),
+    // Renovar o prazo nunca encurta uma janela já aberta (ver `openRecoveryCoupon`).
+    expiryDate: new Date(Math.max(expiraEm, Number(atual?.windowEndsAt) || 0)).toISOString(),
     isActive: true,
     targetType: 'specific',
     targetEmails: [email],

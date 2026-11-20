@@ -30,7 +30,7 @@ describe('openRecoveryLink', () => {
 describe('mensagens', () => {
   it('explicam cada motivo e só reconhecem códigos conhecidos', () => {
     expect(recoveryErrorMessage('recovery_link_required')).toMatch(/botão do e-mail/);
-    expect(recoveryErrorMessage('recovery_window_closed')).toMatch(/2 horas/);
+    expect(recoveryErrorMessage('recovery_window_closed')).toMatch(/24 horas/);
     expect(recoveryErrorMessage('recovery_coupon_cpf_used')).toMatch(/uma vez só/);
     expect(recoveryErrorMessage('qualquer_coisa')).toBe('');
     expect(recoveryErrorMessage(undefined)).toBe('');
