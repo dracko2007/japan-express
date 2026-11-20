@@ -12,12 +12,29 @@ interface PaymentMethodsProps {
   methods: PaymentMethodsState;
 }
 
+/** Mastercard: dois círculos (vermelho e amarelo) com a interseção laranja, como o logo de verdade. */
+const MastercardMark: React.FC = () => (
+  <svg viewBox="0 0 32 20" role="img" aria-label="Mastercard" className="h-5 w-auto">
+    <title>Mastercard</title>
+    <circle cx="11" cy="10" r="9" fill="#EB001B" />
+    <circle cx="21" cy="10" r="9" fill="#F79E1B" />
+    <path d="M16 2.52A9 9 0 0 1 16 17.48A9 9 0 0 1 16 2.52Z" fill="#FF5F00" />
+  </svg>
+);
+
 const Badge: React.FC<{ icon: PaymentBrandIcon; dimmed?: boolean }> = ({ icon, dimmed = false }) => (
-  <li className={`flex h-9 w-11 items-center justify-center rounded-md bg-white/10 ${dimmed ? 'opacity-50' : ''}`}>
-    <svg viewBox="0 0 24 24" role="img" aria-label={icon.label} className="h-5 w-auto max-w-[2rem] fill-current text-white">
-      <title>{icon.label}</title>
-      <path d={icon.path} />
-    </svg>
+  <li
+    className={`flex h-9 w-12 items-center justify-center rounded-md ${dimmed ? 'opacity-50' : ''}`}
+    style={{ backgroundColor: icon.background ?? '#ffffff' }}
+  >
+    {icon.label === 'Mastercard' ? (
+      <MastercardMark />
+    ) : (
+      <svg viewBox="0 0 24 24" role="img" aria-label={icon.label} className="h-5 w-auto max-w-[2rem]" fill={icon.color}>
+        <title>{icon.label}</title>
+        <path d={icon.path} />
+      </svg>
+    )}
   </li>
 );
 
