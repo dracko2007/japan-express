@@ -20,8 +20,15 @@ const DEFAULT_CONFIG: WaServerConfig = {
   serverUrl: 'http://localhost:3220',
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type OrderLike = any;
+/** O que as mensagens de WhatsApp leem do pedido (formatos de épocas diferentes do app: tudo opcional). */
+interface OrderLike {
+  orderNumber?: string;
+  customerPhone?: string;
+  customerName?: string;
+  phone?: string;
+  shippingAddress?: { name?: string; phone?: string };
+  items?: Array<{ quantity?: number | string; productName?: string; name?: string; size?: string }>;
+}
 
 const getPhone = (order: OrderLike): string =>
   order?.customerPhone || order?.shippingAddress?.phone || order?.phone || '';
@@ -49,7 +56,7 @@ export const msgPreparing = (order: OrderLike): string =>
 /** Mensagem: pedido enviado, com itens e rastreio. */
 export const msgShipped = (order: OrderLike, trackingNumber: string, trackingUrl: string, carrier: string): string => {
   const items = (order.items || [])
-    .map((i: OrderLike) => `• ${i.quantity}x ${i.productName || i.name}${i.size ? ` (${i.size})` : ''}`)
+    .map((i) => `• ${i.quantity}x ${i.productName || i.name}${i.size ? ` (${i.size})` : ''}`)
     .join('\n');
   let msg =
     `Olá ${getFirstName(order)}! ✈️\n\n` +

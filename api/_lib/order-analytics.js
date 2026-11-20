@@ -268,3 +268,10 @@ export function matchesCouponFilters(row, type = 'all', code = '') {
     || row.couponCode.toLowerCase().includes(needle)
     || row.affiliateCode.toLowerCase().includes(needle);
 }
+
+/** Campos de pedido que os relatórios leem (o painel e a CLI projetam só estes, para não carregar o pedido inteiro). */
+export const ORDER_FIELDS = [
+  'orderDate', 'date', 'syncedAt', 'status', 'paymentMethod', 'currency',
+  'totalYen', 'grandTotalYen', 'totalPrice', 'totalAmount', 'shippingCostYen', 'shipping',
+  'psFeeYen', 'couponDiscountYen', 'redeemPoints', 'items',
+];

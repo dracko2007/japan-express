@@ -84,9 +84,9 @@ export const orderService = {
 
       await firebaseSyncService.syncOrderToFirestore('manual-sale', order);
       return { ok: true, orderNumber };
-    } catch (e: any) {
+    } catch (e) {
       devError('❌ [ORDER] createManualSale falhou:', e);
-      return { ok: false, error: e?.message || 'Erro ao registrar venda' };
+      return { ok: false, error: (e as { message?: string } | null)?.message || 'Erro ao registrar venda' };
     }
   },
 
@@ -98,7 +98,7 @@ export const orderService = {
     pageSize = 25,
     cursor: OrderPageCursor | null = null
   ): Promise<OrdersPage> => {
-    const page = await firebaseSyncService.getOrdersPageFromFirestore(pageSize, cursor);
+    const page = await firebaseSyncService.getOrdersPageFromFirestore<Order & { date?: string; syncedAt?: string; totalAmount?: number }>(pageSize, cursor);
     const items: Order[] = page.items.map((order) => ({
       ...order,
       orderDate: order.orderDate || order.date || order.syncedAt,
@@ -185,7 +185,7 @@ export const orderService = {
     Object.keys(users).forEach((email) => {
       const user = users[email];
       if (user.orders && user.orders.length > 0) {
-        const orderIndex = user.orders.findIndex((order: any) =>
+        const orderIndex = user.orders.findIndex((order: { orderNumber?: string }) =>
           order.orderNumber === orderNumber
         );
         if (orderIndex !== -1) {
@@ -338,7 +338,7 @@ export const orderService = {
     Object.keys(users).forEach((email) => {
       const user = users[email];
       if (user.orders && user.orders.length > 0) {
-        user.orders.forEach((order: any, orderIndex: number) => {
+        user.orders.forEach((order: { orderNumber?: string }, orderIndex: number) => {
           if (order.orderNumber === orderNumber) {
             users[email].orders[orderIndex].trackingNumber = trackingNumber;
             users[email].orders[orderIndex].trackingUrl = trackingUrl;
@@ -359,7 +359,7 @@ export const orderService = {
         try {
           const userOrders = JSON.parse(safeStorage.getItem(key) || '[]');
           let changed = false;
-          userOrders.forEach((order: any, idx: number) => {
+          userOrders.forEach((order: { orderNumber?: string }, idx: number) => {
             if (order.orderNumber === orderNumber) {
               userOrders[idx].trackingNumber = trackingNumber;
               userOrders[idx].trackingUrl = trackingUrl;

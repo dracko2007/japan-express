@@ -3,7 +3,7 @@ import { AdminTabItem, AdminTab } from '@/components/admin/adminTabs';
 
 interface AdminSidebarProps {
   tabGroups: { title: string; items: AdminTabItem[]; }[];
-  activeTab: "orders" | "coupons" | "dashboard" | "customers" | "products" | "calculator" | "migration" | "promotion" | "negotiations" | "marketing" | "employees" | "coupon-usage" | "fraud" | "thermal-printer" | "whatsapp" | "review-moderation" | "margin-audit" | "visitors" | "finance-detail" | "sandbox" | "affiliates" | "requests" | "b2b" | "videos" | "home" | "vlog" | "sorteio" | "admins";
+  activeTab: "orders" | "coupons" | "dashboard" | "customers" | "products" | "calculator" | "migration" | "promotion" | "negotiations" | "marketing" | "employees" | "coupon-usage" | "fraud" | "thermal-printer" | "whatsapp" | "review-moderation" | "margin-audit" | "visitors" | "finance-detail" | "sandbox" | "affiliates" | "requests" | "b2b" | "videos" | "home" | "vlog" | "sorteio" | "admins" | "api-keys";
   setActiveTab: (tab: AdminTab) => void;
 }
 

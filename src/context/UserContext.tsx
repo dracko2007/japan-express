@@ -16,7 +16,7 @@ import { sendVerificationEmail } from '@/services/mailService';
 import { flushCartSync } from '@/services/cartSyncService';
 import type { UserProfile, Coupon, Order, UserContextType } from '@/context/userTypes';
 import { makeWelcomeCoupon } from '@/context/userTypes';
-import { normalizeStoredOrder, fixTrackingUrl, mergeOrders } from '@/context/orderHelpers';
+import { normalizeStoredOrder, fixTrackingUrl, mergeOrders, type StoredOrder } from '@/context/orderHelpers';
 
 // Os tipos moram em userTypes.ts; reexportados aqui para os imports '@/context/UserContext' continuarem iguais.
 export type { UserProfile, Coupon, Order, UserContextType } from '@/context/userTypes';
@@ -173,7 +173,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     const orderMap = new Map<string, Order>();
     const addOrders = (list: unknown, overwrite = true) => {
       if (!Array.isArray(list)) return;
-      list.forEach((order: any) => {
+      list.forEach((order: StoredOrder) => {
         const normalized = normalizeStoredOrder(order);
         const key = normalized?.orderNumber || normalized?.id;
         if (!key || !normalized) return;
@@ -198,7 +198,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
       // and may contain older duplicate entries with wrong paymentMethod)
       addOrders(
         Array.isArray(legacyOrders)
-          ? legacyOrders.filter((order: any) =>
+          ? legacyOrders.filter((order: { customerEmail?: string; email?: string; shippingAddress?: { email?: string } } | null) =>
               normalizeEmail(order?.customerEmail || order?.email || order?.shippingAddress?.email || '') === normalizedEmail
             )
           : [],
@@ -217,7 +217,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
       // Ignore malformed local users backup.
     }
 
-    return Array.from(orderMap.values()).sort((a: any, b: any) =>
+    return Array.from(orderMap.values()).sort((a, b) =>
       new Date(b.orderDate || b.date).getTime() - new Date(a.orderDate || a.date).getTime()
     );
   };
@@ -283,7 +283,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     userEmail?: string,
     cursor: OrderPageCursor | null = null
   ): Promise<LoadedOrdersPage> => {
-    const page = await firebaseSyncService.getOrdersFromFirestore(userId, userEmail, 20, cursor);
+    const page = await firebaseSyncService.getOrdersFromFirestore<StoredOrder>(userId, userEmail, 20, cursor);
     const items = page.items.map((order) => {
       const mapped = {
         id: order.id || order.orderNumber,
@@ -304,7 +304,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
         // em pedidos brasileiros sem isso). `psFeeYen`/`taxAmount` alimentam
         // os blocos de detalhamento do pedido; `couponCode`/`couponDiscount`/
         // `appliedCoupon`/`grandTotalYen`/`paymentConfirmed` são lidos direto
-        // do pedido bruto em Profile.tsx (`(order as any).campo`).
+        // do pedido bruto em Profile.tsx (`order.campo`).
         currency: order.currency || 'JPY',
         ...(order.psFeeYen != null && { psFeeYen: order.psFeeYen }),
         ...(order.taxAmount != null && { taxAmount: order.taxAmount }),
@@ -323,7 +323,9 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
         ...(order.shipping && { shipping: order.shipping }),
       };
       return fixTrackingUrl(mapped);
-    }) as Order[];
+    // Fronteira dos dados: o pedido do Firestore é remontado campo a campo acima; pedido antigo pode vir sem
+    // `shippingAddress` completo, e as telas já tratam campo ausente.
+    }) as unknown as Order[];
 
     return {
       items,
@@ -410,14 +412,14 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
             // O e-mail AUTENTICADO no Firebase é a fonte da verdade de QUEM logou.
             // Sem isto, um perfil do Firestore podia sobrescrever o e-mail do admin
             // e derrubar o acesso de admin logo após o login.
-            email: firebaseUser.email || (firestoreUser as any).email || localUser.email,
+            email: firebaseUser.email || firestoreUser.email || localUser.email,
             // Keep the most complete address (Firestore if has data, else local)
-            address: (firestoreUser as any).address?.postalCode
-              ? { ...localUser.address, ...(firestoreUser as any).address }
-              : localUser.address || (firestoreUser as any).address || {},
+            address: firestoreUser.address?.postalCode
+              ? { ...localUser.address, ...firestoreUser.address }
+              : localUser.address || firestoreUser.address || {},
             // Keep birthdate from whichever source has it
-            birthdate: (firestoreUser as any).birthdate || localUser.birthdate || undefined,
-            phone: (firestoreUser as any).phone || localUser.phone || '',
+            birthdate: firestoreUser.birthdate || localUser.birthdate || undefined,
+            phone: firestoreUser.phone || localUser.phone || '',
           } as UserProfile;
           
           setUser(mergedUser);
@@ -475,6 +477,9 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     if (!firebaseConfigReady || !auth) setAuthReady(true);
 
     return () => unsubscribe();
+    // Assina o login UMA vez. O listener usa funções recriadas a cada render (clearCurrentSession etc.):
+    // listá-las reinscreveria o listener do Firebase em todo render e dispararia o login de novo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Save current user session to safeStorage (sem senha)
@@ -484,6 +489,8 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     } else {
       safeStorage.removeItem('user');
     }
+    // `persistSessionUser` é recriada a cada render; a gravação só deve acompanhar o usuário.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // Favoritos ficam no Firestore; ao abrir a sessão (e quando o Auth fica
@@ -650,7 +657,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
         devLog('🔒 [LOGIN] E-mail não verificado, bloqueando acesso:', normalizedEmail);
         const verificationSent = await sendVerificationEmailWithFallback(
           normalizedEmail,
-          (userProfile as any)?.name || localUser?.name
+          userProfile?.name || localUser?.name
         );
         await firebaseSyncService.logoutUser();
         clearCurrentSession();
@@ -680,8 +687,8 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
         setIsAuthenticated(true);
         
         // Load and merge the first bounded Firestore page.
-        const localOrders = getUserOrders(userData.id, (userData as any).email || normalizedEmail);
-        const firestorePage = await loadInitialOrdersFromFirestore(firebaseUser.uid, (userData as any).email || normalizedEmail);
+        const localOrders = getUserOrders(userData.id, userData.email || normalizedEmail);
+        const firestorePage = await loadInitialOrdersFromFirestore(firebaseUser.uid, userData.email || normalizedEmail);
         const allOrders = mergeOrders(localOrders, firestorePage.items);
 
         const userCoupons = resolveUserCoupons(userData as UserProfile);
@@ -696,7 +703,8 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
         trackLogin('email');
         return { success: true };
       }
-    } catch (error: any) {
+    } catch (rawError) {
+      const error = rawError as { code?: string } | null;
       devLog('⚠️ [LOGIN] Firebase Auth failed:', error?.code);
       
       const authCode = error?.code || '';
@@ -764,7 +772,8 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
       let firebaseUser;
       try {
         firebaseUser = await firebaseSyncService.registerUser(normalizedEmail, userData.password);
-      } catch (authError: any) {
+      } catch (rawAuthError) {
+        const authError = rawAuthError as { code?: string; message?: string };
         if (authError.code && authError.code.includes('api-key-not-valid')) {
           return { success: false, error: 'API Key inválida. Verifique se a chave é do projeto correto.' };
         }
@@ -805,7 +814,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
             
             // Verification is sent once below, after the profile is saved.
             // Fall through to profile creation below
-          } catch (loginError: any) {
+          } catch {
             // Can't login - wrong password for existing Auth account
             devLog('❌ [REGISTER] Ghost user exists but password mismatch');
             await firebaseSyncService.logoutUser().catch(() => {});
@@ -1150,7 +1159,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     return { valid: true, coupon: found };
   };
 
-  const addOrder = async (orderData: Omit<Order, 'id' | 'date'> & { orderNumber?: string }) => {
+  const addOrder = async (orderData: Omit<Order, 'id' | 'date'> & { orderNumber?: string; customerEmail?: string; customerName?: string }) => {
     const newOrder: Order = {
       ...orderData,
       id: `order-${Date.now()}`,
@@ -1168,13 +1177,13 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     // Sync to Firestore
     if (user) {
       try {
-        const customerEmail = normalizeEmail((orderData as any).customerEmail || user.email);
+        const customerEmail = normalizeEmail(orderData.customerEmail || user.email);
         await firebaseSyncService.syncOrderToFirestore(user.id, {
           ...newOrder,
           orderDate: newOrder.date,
           totalPrice: newOrder.totalAmount,
           customerEmail,
-          customerName: (orderData as any).customerName || user.name,
+          customerName: orderData.customerName || user.name,
           customerPhone: user.phone,
         });
         devLog('✅ [ORDER] Synced to Firestore:', newOrder.orderNumber);
@@ -1188,7 +1197,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
       const usersData = safeStorage.getItem('japan-express-users');
       if (usersData) {
         const users = JSON.parse(usersData);
-        const customerEmail = normalizeEmail((orderData as any).customerEmail || user.email);
+        const customerEmail = normalizeEmail(orderData.customerEmail || user.email);
         const userKey = users[customerEmail] ? customerEmail : user.email;
         if (users[userKey]) {
           if (!users[userKey].orders) {
@@ -1215,8 +1224,8 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     try {
       await firebaseSyncService.sendPasswordReset(normalizeEmail(email));
       return { success: true };
-    } catch (error: any) {
-      const code = error?.code || '';
+    } catch (error) {
+      const code = (error as { code?: string } | null)?.code || '';
       if (code.includes('user-not-found')) {
         return { success: false, error: 'Nenhuma conta encontrada com este email.' };
       }

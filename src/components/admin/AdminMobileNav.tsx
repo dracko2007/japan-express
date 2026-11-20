@@ -2,7 +2,7 @@ import React from 'react';
 import { AdminTab, AdminTabItem } from '@/components/admin/adminTabs';
 
 interface AdminMobileNavProps {
-  activeTab: "orders" | "coupons" | "dashboard" | "customers" | "products" | "calculator" | "migration" | "promotion" | "negotiations" | "marketing" | "employees" | "coupon-usage" | "fraud" | "thermal-printer" | "whatsapp" | "review-moderation" | "margin-audit" | "visitors" | "finance-detail" | "sandbox" | "affiliates" | "requests" | "b2b" | "videos" | "home" | "vlog" | "sorteio" | "admins";
+  activeTab: "orders" | "coupons" | "dashboard" | "customers" | "products" | "calculator" | "migration" | "promotion" | "negotiations" | "marketing" | "employees" | "coupon-usage" | "fraud" | "thermal-printer" | "whatsapp" | "review-moderation" | "margin-audit" | "visitors" | "finance-detail" | "sandbox" | "affiliates" | "requests" | "b2b" | "videos" | "home" | "vlog" | "sorteio" | "admins" | "api-keys";
   setActiveTab: (tab: AdminTab) => void;
   tabGroups: { title: string; items: AdminTabItem[]; }[];
   activeLabel: string;

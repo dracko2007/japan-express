@@ -233,6 +233,8 @@ const CustomerList: React.FC = () => {
 
   useEffect(() => {
     loadCustomers();
+  // Carrega a lista uma vez ao abrir a aba; `loadCustomers` é recriada a cada render e listá-la repetiria a leitura no Firestore.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const withTimeout = <T,>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>

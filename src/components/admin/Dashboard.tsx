@@ -156,6 +156,8 @@ const Dashboard: React.FC<DashboardProps> = ({ pending, onNavigate }) => {
 
   useEffect(() => {
     void loadData();
+  // Carrega os números uma vez ao abrir; `loadData` é recriada a cada render e listá-la repetiria todas as leituras.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
 
   const loadData = async () => {

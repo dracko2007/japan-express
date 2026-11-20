@@ -1,7 +1,7 @@
 import { safeStorage } from '@/utils/storage';
 import React, { Suspense, lazy, useCallback, useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Package, Printer, TestTube, Tag, BarChart3, Users, PackagePlus, Video, Megaphone, Clapperboard, Building2, Sparkles, ShieldCheck, Calculator, CloudUpload, Handshake, Flag, TrendingDown, MessageCircle, Trophy, Landmark } from 'lucide-react';
+import { KeyRound, Package, Printer, TestTube, Tag, BarChart3, Users, PackagePlus, Video, Megaphone, Clapperboard, Building2, Sparkles, ShieldCheck, Calculator, CloudUpload, Handshake, Flag, TrendingDown, MessageCircle, Trophy, Landmark } from 'lucide-react';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/context/UserContext';
@@ -42,6 +42,7 @@ const VlogManager = lazy(() => import('@/components/admin/VlogManager'));
 const CustomRequestManager = lazy(() => import('@/components/admin/CustomRequestManager'));
 const B2BRequestManager = lazy(() => import('@/components/admin/B2BRequestManager'));
 const AdminAccessManager = lazy(() => import('@/components/admin/AdminAccessManager'));
+const ApiKeyManager = lazy(() => import('@/components/admin/ApiKeyManager'));
 const CN23Modal = lazy(() => import('@/components/admin/CN23Modal'));
 const ImageMigration = lazy(() => import('@/components/admin/ImageMigration'));
 const PromotionManager = lazy(() => import('@/components/admin/PromotionManager'));
@@ -92,7 +93,7 @@ const Admin: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('aba');
   const requestedTab: AdminTab = isAdminTab(tabParam) ? tabParam : 'dashboard';
-  const activeTab: AdminTab = requestedTab === 'admins' && !permissions.canManageAdmins ? 'dashboard' : requestedTab;
+  const activeTab: AdminTab = (requestedTab === 'admins' || requestedTab === 'api-keys') && !permissions.canManageAdmins ? 'dashboard' : requestedTab;
   const setActiveTab = useCallback((tab: AdminTab) => {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
@@ -184,6 +185,8 @@ const Admin: React.FC = () => {
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', debouncedRefresh);
     };
+  // Carrega os pedidos uma vez ao abrir o painel; `loadOrders` é recriada a cada render e listá-la repetiria a leitura.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, navigate, authReady]);
 
   useEffect(() => {
@@ -544,7 +547,7 @@ _This is an automated test message_
     ] },
     // Só nível 3 vê o gerenciamento de administradores
     ...(permissions.canManageAdmins
-      ? [{ title: 'Configurações', items: [{ id: 'admins' as AdminTab, label: 'Administradores', icon: ShieldCheck }] }]
+      ? [{ title: 'Configurações', items: [{ id: 'admins' as AdminTab, label: 'Administradores', icon: ShieldCheck }, { id: 'api-keys' as AdminTab, label: 'Chaves de API', icon: KeyRound }] }]
       : []),
   ];
   const allTabs: AdminTabItem[] = tabGroups.flatMap((g) => g.items);
@@ -675,6 +678,8 @@ _This is an automated test message_
               <VideoReviewManager />
             ) : activeTab === 'admins' ? (
               <AdminAccessManager />
+            ) : activeTab === 'api-keys' ? (
+              <ApiKeyManager />
             ) : activeTab === 'promotion' ? (
               <PromotionManager />
             ) : activeTab === 'calculator' ? (

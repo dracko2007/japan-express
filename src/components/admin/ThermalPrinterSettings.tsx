@@ -13,6 +13,8 @@ export default function ThermalPrinterSettings() {
 
   useEffect(() => {
     if (cfg.enabled) checkOnline();
+  // Confere a impressora só ao abrir a tela; ligar/desligar `cfg.enabled` depois não deve refazer a checagem.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function checkOnline() {

@@ -22,7 +22,7 @@ import { toast } from 'sonner';
 import { PARTNERSHIP_KEYWORDS, partnershipAnswer, partnershipExamples } from '../../shared/partnership.js';
 import { onOpenRequest, setMinimized, useMinimized } from '@/utils/floatingWidgets';
 import { useDraggableBubble } from '@/hooks/useDraggableBubble';
-import { WHATSAPP, WHATSAPP_LINK, LOCAL_SKILL_RE, AGENT_STEP_LABELS, WEIGHT_BY_CATEGORY, DEFAULT_WEIGHT, AI_HISTORY_TURNS, AGENT_HISTORY_MESSAGES } from '@/components/kimiclaw/constants';
+import { WHATSAPP, WHATSAPP_LINK, LOCAL_SKILL_RE, AGENT_STEP_LABELS, WEIGHT_BY_CATEGORY, DEFAULT_WEIGHT, AI_HISTORY_TURNS, AGENT_HISTORY_MESSAGES, INACTIVITY_MS } from '@/components/kimiclaw/constants';
 import type { Message, OrderRef } from '@/components/kimiclaw/types';
 import { calculateShipping, getProductWeight } from '@/components/kimiclaw/shipping';
 import { normalizeText, tokenize, detectCategory, CATEGORY_LABEL } from '@/components/kimiclaw/textSearch';
@@ -93,7 +93,7 @@ const KimiClawAssistant: React.FC = () => {
         if (saved) {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed.map((m: any) => ({
+            return parsed.map((m: Omit<Message, 'timestamp'> & { timestamp: string | number }) => ({
               ...m,
               // Conversas antigas guardavam a boas-vindas com o nome antigo do assistente.
               text: m.id === 'welcome' ? t('kimiclaw.welcome') : m.text,
@@ -119,7 +119,6 @@ const KimiClawAssistant: React.FC = () => {
   // Conversas longas acumulam tokens na API (todo o histórico é reenviado a cada msg).
   // Para evitar isso, se não houver interação por 10 min o chat é zerado (memória + storage),
   // voltando à mensagem de boas-vindas. Qualquer atividade reinicia a contagem.
-  const INACTIVITY_MS = 10 * 60 * 1000; // 10 minutos
   const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Zera a conversa por completo (estado + persistência)
@@ -229,6 +228,8 @@ const KimiClawAssistant: React.FC = () => {
       ]);
     }, 1200);
     return () => clearTimeout(timer);
+  // Roda quando a navegação traz um pedido novo (`location`). `language` e `user` só montam o texto: listá-los repetiria a confirmação ao trocar o idioma.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location]);
 
   const categoryAliases: Record<string, string[]> = {

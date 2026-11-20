@@ -1,4 +1,7 @@
 import { Product } from '@/types';
+
+/** O que o nome em inglês precisa do produto: serve para o catálogo e para o produto resumido dos e-mails. */
+type NameableProduct = Pick<Product, 'id' | 'name'> & Partial<Pick<Product, 'description' | 'flavor'>>;
 import { products as baseProducts } from '@/data/products';
 
 const hasJapanese = (s: string) => /[぀-ヿ㐀-鿿]/.test(s || '');
@@ -11,7 +14,7 @@ const hasPortugueseProductWords = (s: string) => {
   return /\b(limpeza|profunda|protetor|solar|locao|hidratante|oleo|sabonete|creme|essencia|clareador|maquiagem|acido|hialuronico|vitamina|pele|cabelo)\b/.test(n);
 };
 
-const knownEnglishName = (p: Product): string => {
+const knownEnglishName = (p: NameableProduct): string => {
   const base = baseProducts.find((item) => item.id === p.id)?.name || '';
   if (base) return base;
 
@@ -50,7 +53,7 @@ const knownEnglishName = (p: Product): string => {
   return '';
 };
 
-export const productEnglishName = (p: Product): string => {
+export const productEnglishName = (p: NameableProduct): string => {
   const current = p.name || '';
   const known = knownEnglishName(p);
 

@@ -3,7 +3,7 @@
  */
 
 export interface Product {
-  id: number;
+  id: string;
   name: string;
   prices: {
     [key: string]: number;
@@ -43,8 +43,8 @@ export interface OrderData {
   paymentMethod: 'bank' | 'paypay' | 'yucho' | 'wise' | 'pix' | 'card';
   deliveryTime?: string;
   couponDiscount?: number;
-  appliedCoupon?: { code: string; discount: number; [key: string]: any };
-  coupon?: { code: string; discount: number; [key: string]: any };
+  appliedCoupon?: { code: string; discount: number; [key: string]: unknown };
+  coupon?: { code: string; discount: number; [key: string]: unknown };
 }
 
 export interface OrderItem {

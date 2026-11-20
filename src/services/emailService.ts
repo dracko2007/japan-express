@@ -259,7 +259,7 @@ export const emailService = {
             ${items.map((item: CartItem) => `
               <div class="product-item">
                 <div>
-                  <strong>${productEnglishName(item.product as any)}</strong><br>
+                  <strong>${productEnglishName(item.product)}</strong><br>
                   <small>Tamanho: ${item.size} | Quantidade: ${item.quantity}</small>
                 </div>
                 <div style="text-align: right;">
@@ -491,7 +491,7 @@ export const emailService = {
             ${items.map((item: CartItem) => `
               <div class="product-item">
                 <div>
-                  <strong>${productEnglishName(item.product as any)}</strong><br>
+                  <strong>${productEnglishName(item.product)}</strong><br>
                   <small>Tamanho: ${item.size} | Quantidade: ${item.quantity}</small>
                 </div>
                 <div style="text-align: right;">

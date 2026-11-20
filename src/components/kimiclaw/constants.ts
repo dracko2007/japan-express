@@ -39,6 +39,8 @@ export const DEFAULT_WEIGHT = { small: 300, large: 800 };
 
 // Turnos de conversa enviados à IA. 6 estourava rápido: uma recomendação seguida
 // de duas perguntas de acompanhamento já empurrava o produto para fora da janela.
+/** Sem atividade por este tempo, a conversa é limpa. */
+export const INACTIVITY_MS = 10 * 60 * 1000; // 10 minutos
 export const AI_HISTORY_TURNS = 12;
 // Agente: menos mensagens (cada chamada reenviaria tudo; o "[contexto]" guarda os produtos).
 export const AGENT_HISTORY_MESSAGES = 8;
