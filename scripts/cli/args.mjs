@@ -22,7 +22,7 @@ const ALIASES = {
   'coupons.create': { 'usage-limit': 'usageLimit', 'min-order': 'minOrderValue', 'free-shipping': 'freeShipping' },
 };
 
-const NUMBERS = new Set(['limit', 'value', 'days', 'usageLimit', 'minOrderValue']);
+const NUMBERS = new Set(['limit', 'offset', 'value', 'days', 'usageLimit', 'minOrderValue']);
 const BOOLEANS = new Set(['hidden', 'freeShipping', 'active']);
 
 /** Opções de `products.update` que viram campos de `set` (o que muda no produto). */
@@ -162,11 +162,11 @@ Consulta
   je health                              conta pedidos, clientes, produtos e cupons
   je whoami                              a chave em uso: escopos e validade
   je stats                               resumo de vendas (o do Dashboard)
-  je orders list [--status S] [--search T] [--limit N]
+  je orders list [--status S] [--search T] [--limit N] [--offset N]
   je orders get <nº do pedido>
-  je customers list [--search T] [--limit N]
+  je customers list [--search T] [--limit N] [--offset N]
   je customers get <e-mail>              perfil, login e pedidos
-  je products list [--category C] [--search T] [--hidden true] [--limit N]
+  je products list [--category C] [--search T] [--hidden true] [--limit N] [--offset N]
   je products get <id>                   inclui o custo
   je coupons list
   je audit                               o que as chaves de API fizeram
@@ -180,6 +180,8 @@ Alteração
   je coupons create <CÓDIGO> --type percent|fixed --value N [--days 30] [--description T]
                           [--usage-limit N] [--min-order ¥] [--free-shipping]
   je coupons set-active <CÓDIGO> true|false
+
+Páginas: as listas mostram até 100 por vez e respondem total e hasMore; use --offset para a próxima.
 
 Apaga (exige --yes)
   je customers delete <e-mail> --yes     login, perfil, desejos e carrinho (os pedidos ficam)

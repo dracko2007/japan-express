@@ -14,7 +14,8 @@ import { deleteCustomerAccount } from './customer-accounts.js';
  */
 
 const ORDER_STATUSES = ['pending', 'processing', 'confirmed', 'shipped', 'delivered', 'cancelled'];
-const SCAN_LIMIT = 300; // pedidos/clientes/produtos lidos por consulta; filtro e ordem acontecem aqui, sem índice novo
+const SCAN_LIMIT = 3000; // máximo de documentos lidos por consulta; filtro e ordem acontecem aqui, sem índice novo
+const SCAN_PAGE = 500;
 const PRODUCT_FIELDS_SETTABLE = new Set([
   'hidden', 'discountPercent', 'stock', 'featured', 'isNew', 'noPsFee', 'freeShippingSolo', 'prices', 'cost',
 ]);
@@ -51,6 +52,29 @@ function limitArg(args, fallback = 20) {
   return whole(args, 'limit', { min: 1, max: 100, fallback });
 }
 
+/** Lê a coleção toda (em páginas de 500, ordenada pelo id ou por `orderField`) até SCAN_LIMIT; avisa se cortou. */
+async function scanCollection(db, name, { orderField, direction = 'asc' } = {}) {
+  const docs = [];
+  let cursor = null;
+  while (docs.length < SCAN_LIMIT) {
+    let query = orderField ? db.collection(name).orderBy(orderField, direction) : db.collection(name).orderBy('__name__');
+    if (cursor) query = query.startAfter(cursor);
+    const snap = await query.limit(Math.min(SCAN_PAGE, SCAN_LIMIT - docs.length)).get();
+    docs.push(...snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    if (snap.size < SCAN_PAGE) return { docs, truncated: false };
+    cursor = snap.docs[snap.docs.length - 1];
+  }
+  return { docs, truncated: true };
+}
+
+/** Recorta a página pedida e descreve o que sobrou: `total` (depois dos filtros), `offset`, `hasMore`. */
+function paginate(list, args, truncated = false) {
+  const limit = limitArg(args);
+  const offset = whole(args, 'offset', { min: 0, max: 1_000_000, fallback: 0 });
+  const page = list.slice(offset, offset + limit);
+  return { page, meta: { count: page.length, total: list.length, offset, hasMore: offset + page.length < list.length, ...(truncated ? { truncated: true } : {}) } };
+}
+
 /** Timestamps do Firestore viram texto ISO, para a resposta ser JSON puro. */
 export function plain(value) {
   if (value === null || value === undefined) return value ?? null;
@@ -63,10 +87,7 @@ export function plain(value) {
 const pick = (data, fields) => Object.fromEntries(fields.filter((f) => data[f] !== undefined).map((f) => [f, plain(data[f])]));
 const includes = (value, needle) => String(value ?? '').toLowerCase().includes(needle);
 
-async function mostRecentOrders(db) {
-  const snap = await db.collection('orders').orderBy('orderDate', 'desc').limit(SCAN_LIMIT).get();
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-}
+const mostRecentOrders = (db) => scanCollection(db, 'orders', { orderField: 'orderDate', direction: 'desc' });
 
 const orderSummary = (o) => ({
   orderNumber: o.orderNumber || o.id,
@@ -129,17 +150,18 @@ export const COMMANDS = {
 
   'orders.list': {
     scope: 'read',
-    help: `Pedidos mais recentes. Opções: status, search (nº, nome ou e-mail), limit. Lê os ${SCAN_LIMIT} mais recentes.`,
+    help: `Pedidos, do mais recente. Opções: status, search (nº, nome ou e-mail), limit (até 100), offset.`,
     async run({ db, args }) {
       const status = text(args, 'status', { required: false, max: 30 });
       const search = text(args, 'search', { required: false, max: 100 }).toLowerCase();
-      const limit = limitArg(args);
-      let list = await mostRecentOrders(db);
+      const scan = await mostRecentOrders(db);
+      let list = scan.docs;
       if (status) list = list.filter((o) => (o.status || 'pending') === status);
       if (search) {
         list = list.filter((o) => [o.orderNumber, o.id, o.customerName, o.customerEmail, o.shippingAddress?.name].some((v) => includes(v, search)));
       }
-      return { count: Math.min(list.length, limit), orders: list.slice(0, limit).map(orderSummary) };
+      const { page, meta } = paginate(list, args, scan.truncated);
+      return { ...meta, orders: page.map(orderSummary) };
     },
   },
 
@@ -154,16 +176,16 @@ export const COMMANDS = {
 
   'customers.list': {
     scope: 'read',
-    help: `Clientes. Opções: search (nome, e-mail ou telefone), limit. Lê ${SCAN_LIMIT} perfis.`,
+    help: `Clientes. Opções: search (nome, e-mail ou telefone), limit (até 100), offset.`,
     async run({ db, args }) {
       const search = text(args, 'search', { required: false, max: 100 }).toLowerCase();
-      const limit = limitArg(args);
-      const snap = await db.collection('users').limit(SCAN_LIMIT).get();
-      let list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const scan = await scanCollection(db, 'users');
+      let list = scan.docs;
       if (search) list = list.filter((u) => [u.name, u.email, u.phone].some((v) => includes(v, search)));
+      const { page, meta } = paginate(list, args, scan.truncated);
       return {
-        count: Math.min(list.length, limit),
-        customers: list.slice(0, limit).map((u) => ({
+        ...meta,
+        customers: page.map((u) => ({
           id: u.id, name: u.name, email: u.email, phone: u.phone || '', createdAt: plain(u.createdAt),
           points: u.points || 0, coupons: Array.isArray(u.coupons) ? u.coupons.length : 0,
         })),
@@ -192,17 +214,17 @@ export const COMMANDS = {
 
   'products.list': {
     scope: 'read',
-    help: `Produtos. Opções: category, search (nome ou id), hidden (true/false), limit. Lê ${SCAN_LIMIT} produtos.`,
+    help: `Produtos. Opções: category, search (nome ou id), hidden (true/false), limit (até 100), offset.`,
     async run({ db, args }) {
       const category = text(args, 'category', { required: false, max: 60 });
       const search = text(args, 'search', { required: false, max: 100 }).toLowerCase();
-      const limit = limitArg(args);
-      const snap = await db.collection('products').limit(SCAN_LIMIT).get();
-      let list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const scan = await scanCollection(db, 'products');
+      let list = scan.docs;
       if (category) list = list.filter((p) => p.category === category);
       if (search) list = list.filter((p) => includes(p.name, search) || includes(p.id, search));
       if (args?.hidden !== undefined) list = list.filter((p) => (p.hidden === true) === (args.hidden === true || args.hidden === 'true'));
-      return { count: Math.min(list.length, limit), products: list.slice(0, limit).map((p) => pick(p, ['id', 'name', 'category', 'prices', 'discountPercent', 'hidden', 'stock', 'featured'])) };
+      const { page, meta } = paginate(list, args, scan.truncated);
+      return { ...meta, products: page.map((p) => pick(p, ['id', 'name', 'category', 'prices', 'discountPercent', 'hidden', 'stock', 'featured'])) };
     },
   },
 

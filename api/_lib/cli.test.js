@@ -35,10 +35,11 @@ class FakeRef {
   async delete() { delete this.db.col(this.name)[this.id]; }
 }
 class FakeQuery {
-  constructor(db, name, filters = [], order = null, max = Infinity) { Object.assign(this, { db, name, filters, order, max }); }
-  where(field, op, value) { return new FakeQuery(this.db, this.name, [...this.filters, [field, value]], this.order, this.max); }
-  orderBy(field, dir = 'asc') { return new FakeQuery(this.db, this.name, this.filters, [field, dir], this.max); }
-  limit(n) { return new FakeQuery(this.db, this.name, this.filters, this.order, n); }
+  constructor(db, name, filters = [], order = null, max = Infinity, after = null) { Object.assign(this, { db, name, filters, order, max, after }); }
+  where(field, op, value) { return new FakeQuery(this.db, this.name, [...this.filters, [field, value]], this.order, this.max, this.after); }
+  orderBy(field, dir = 'asc') { return new FakeQuery(this.db, this.name, this.filters, [field, dir], this.max, this.after); }
+  limit(n) { return new FakeQuery(this.db, this.name, this.filters, this.order, n, this.after); }
+  startAfter(snapshot) { return new FakeQuery(this.db, this.name, this.filters, this.order, this.max, snapshot.id); }
   select() { return this; }
   count() { return { get: async () => ({ data: () => ({ count: Object.keys(this.db.col(this.name)).length }) }) }; }
   async get() {
@@ -46,8 +47,10 @@ class FakeQuery {
     for (const [field, value] of this.filters) rows = rows.filter((r) => r.doc[field] === value);
     if (this.order) {
       const [field, dir] = this.order;
-      rows.sort((a, b) => (String(a.doc[field] ?? '') < String(b.doc[field] ?? '') ? -1 : 1) * (dir === 'desc' ? -1 : 1));
+      const key = (r) => (field === '__name__' ? r.id : String(r.doc[field] ?? ''));
+      rows.sort((a, b) => (key(a) < key(b) ? -1 : 1) * (dir === 'desc' ? -1 : 1));
     }
+    if (this.after) rows = rows.slice(rows.findIndex((r) => r.id === this.after) + 1);
     rows = rows.slice(0, this.max);
     const docs = rows.map(({ id, doc }) => ({ id, exists: true, data: () => structuredClone(doc), ref: new FakeRef(this.db, this.name, id) }));
     return { docs, empty: docs.length === 0, size: docs.length };
@@ -288,6 +291,19 @@ describe('comandos de leitura', () => {
     expect((await run(key, 'orders.get', { orderNumber: 'JE-1' })).body.result.customerEmail).toBe('ana@exemplo.com');
     expect((await run(key, 'orders.get', { orderNumber: 'X' })).statusCode).toBe(404);
     expect((await run(key, 'orders.get', {})).body.argument).toBe('orderNumber');
+  });
+
+  it('listas paginam: offset, total, hasMore, e leem além de 500 documentos', async () => {
+    for (let i = 0; i < 1100; i += 1) mocks.db.col('products')[`bulk-${String(i).padStart(4, '0')}`] = { name: `Bulk ${i}`, category: 'doces' };
+    const first = (await run(key, 'products.list', { category: 'doces', limit: 100 })).body.result;
+    expect(first).toMatchObject({ count: 100, total: 1100, offset: 0, hasMore: true });
+    const last = (await run(key, 'products.list', { category: 'doces', limit: 100, offset: 1050 })).body.result;
+    expect(last).toMatchObject({ count: 50, total: 1100, offset: 1050, hasMore: false });
+    expect(last.products.at(-1).id).toBe('bulk-1099');
+    const ids = new Set();
+    for (let offset = 0; offset < 1100; offset += 100) (await run(key, 'products.list', { category: 'doces', limit: 100, offset })).body.result.products.forEach((p) => ids.add(p.id));
+    expect(ids.size).toBe(1100); // sem repetir nem pular
+    expect((await run(key, 'products.list', { offset: -1 })).statusCode).toBe(400);
   });
 
   it('products.list e products.get (com o custo vindo de productCosts)', async () => {
