@@ -1,5 +1,5 @@
 import React from 'react';
-import type { ReviewFormData, ReviewShipping } from '@/components/checkout/reviewTypes';
+import type { ReviewFormData } from '@/components/checkout/reviewTypes';
 import { MapPin } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 

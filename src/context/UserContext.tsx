@@ -13,149 +13,18 @@ import { referralService } from '@/services/referralService';
 import { affiliateService } from '@/services/affiliateService';
 import { trackSignUp, trackLogin } from '@/lib/analytics';
 import { sendVerificationEmail } from '@/services/mailService';
+import type { UserProfile, Coupon, Order, UserContextType } from '@/context/userTypes';
+import { makeWelcomeCoupon } from '@/context/userTypes';
+import { normalizeStoredOrder, fixTrackingUrl, mergeOrders } from '@/context/orderHelpers';
+
+// Os tipos moram em userTypes.ts; reexportados aqui para os imports '@/context/UserContext' continuarem iguais.
+export type { UserProfile, Coupon, Order, UserContextType } from '@/context/userTypes';
+export { makeWelcomeCoupon } from '@/context/userTypes';
 
 const isDev = import.meta.env.DEV;
 const devLog = isDev ? console.log.bind(console) : () => {};
 const devWarn = isDev ? console.warn.bind(console) : () => {};
 const devError = isDev ? console.error.bind(console) : () => {};
-
-export interface UserProfile {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  password?: string; // apenas em memória para modo local-only; NUNCA persistir
-  birthdate?: string;
-  adminRole?: number;         // nível de admin (1/2/3) quando é sessão de admin
-  personType?: 'PF' | 'PJ';   // Pessoa Física ou Jurídica
-  cpf?: string;               // CPF (PF, Brasil) — obrigatório p/ Remessa Conforme
-  cnpj?: string;              // CNPJ (PJ, Brasil)
-  razaoSocial?: string;       // se PJ
-  document?: string;          // Documento de identificação para envio internacional (passaporte, NIF, etc.)
-  gender?: 'masculino' | 'feminino' | 'outro';
-  whatsappMarketing?: boolean;
-  pushEnabled?: boolean;      // notificações push (Web Push/VAPID) ativas neste navegador
-  points?: number; // Pontos de fidelidade (reviews, vídeos)
-  birthdayBonusYear?: number; // Ano em que já recebeu os 1000 pts de aniversário
-  address: {
-    postalCode: string;
-    prefecture: string;
-    city: string;
-    address: string;
-    building?: string;
-  };
-  createdAt: string;
-  coupons?: Coupon[]; // Cupons do perfil (sincronizados no Firestore)
-}
-
-export interface Coupon {
-  id: string;
-  code: string;
-  description: string;
-  discount: number;
-  discountType: 'percentage' | 'fixed';
-  expiresAt: string;
-  isUsed: boolean;
-  freeShipping?: boolean;
-  affiliateCode?: string;     // se preenchido, é um código de influencer (gera comissão)
-  affiliateProductId?: string; // se preenchido, cupom vinculado a produto específico (permite reuso por CPF)
-  affiliateSource?: 'link' | 'code';
-  minOrderValue?: number;     // valor mínimo do pedido em ¥ para usar o cupom
-}
-
-// Fábrica do cupom de boas-vindas concedido no cadastro.
-export const makeWelcomeCoupon = (): Coupon => ({
-  id: `welcome-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-  code: 'BEMVINDO10',
-  description: 'Cupom de boas-vindas — 10% de desconto',
-  discount: 10,
-  discountType: 'percentage',
-  expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
-  isUsed: false,
-});
-
-export interface Order {
-  id: string;
-  orderNumber: string;
-  date: string;
-  /** ISO gravado pelo servidor (`api/orders.js`). `date` é a versão pt-BR, só
-   *  para exibição — para comparar datas use este. */
-  orderDate?: string;
-  /** Só vira `true` quando o pagamento é confirmado
-   *  (`api/_lib/fulfillment.js`): separa pedido pago de pedido só criado. */
-  paymentConfirmed?: boolean;
-  items: Array<{
-    productName: string;
-    size: string;
-    quantity: number;
-    /** Preço unitário na moeda exibida ao cliente (BRL, USD...). */
-    price: number;
-    /** Preço unitário em ienes. É o único valor comparável entre pedidos de
-     *  países diferentes — o que o cálculo de nível de pontos precisa. */
-    unitYen?: number;
-    /** Brinde de promoção: não é mercadoria paga, fica fora dos pontos. */
-    freeGift?: boolean;
-  }>;
-  totalAmount: number;
-  paymentMethod: string;
-  status: 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
-  trackingNumber?: string;
-  trackingUrl?: string;
-  carrier?: string;
-  shipping?: {
-    carrier: string;
-    cost: number;
-    estimatedDays?: string;
-  };
-  shippingAddress: {
-    name: string;
-    postalCode: string;
-    prefecture: string;
-    city: string;
-    address: string;
-    building?: string;
-  };
-}
-
-export interface UserContextType {
-  user: UserProfile | null;
-  isAuthenticated: boolean;
-  authReady: boolean;        // true após o primeiro disparo do onAuthChange (sem flash de login)
-  isAdmin: boolean;          // agindo como admin (conta admin E modo != cliente)
-  isAdminAccount: boolean;   // a conta É admin (independente do modo escolhido)
-  adminRole: number;         // 0=não admin, 1/2/3
-  permissions: { canDelete: boolean; canFinancial: boolean; canManageAdmins: boolean };
-  loginAs: 'admin' | 'user' | null;
-  setLoginAs: (mode: 'admin' | 'user') => void;
-  coupons: Coupon[];
-  orders: Order[];
-  ordersHasMore: boolean;
-  ordersLoadingMore: boolean;
-  loadMoreOrders: () => Promise<void>;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; code?: string; needsVerification?: boolean }>;
-  loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
-  loginWithProvider: (provider: SocialProvider) => Promise<{ success: boolean; error?: string }>;
-  sendPhoneCode: (phoneE164: string, verifier: RecaptchaVerifier) => Promise<{ success: boolean; confirmationResult?: ConfirmationResult; error?: string }>;
-  confirmPhoneCode: (confirmationResult: ConfirmationResult, code: string) => Promise<{ success: boolean; error?: string }>;
-  register: (userData: Omit<UserProfile, 'id' | 'createdAt' | 'password'> & { password: string }) => Promise<{ success: boolean; error?: string; verificationEmailSent?: boolean }>;
-  logout: () => void;
-  updateProfile: (userData: Partial<UserProfile>) => void;
-  addPoints: (amount: number) => void;
-  addCoupon: (coupon: Coupon) => void;
-  useCoupon: (couponId: string) => void;
-  consumeCouponByCode: (code: string) => void;
-  validateProfileCoupon: (code: string, orderTotalYen?: number) => { valid: boolean; coupon?: Coupon; error?: string };
-  addOrder: (order: Omit<Order, 'id' | 'date'> & { orderNumber?: string }) => Promise<void> | void;
-  clearOrderHistory: () => void;
-  refreshOrders: () => Promise<void>;
-  /** `true` quando a leitura dos pedidos no servidor falhou e o que está na
-   *  tela é só a cópia local — que some se o cliente limpar o navegador ou
-   *  entrar de outro aparelho. Precisa ser visível: um histórico faltando em
-   *  silêncio parece pedido perdido. */
-  ordersOffline: boolean;
-  sendPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
-  resendVerificationEmail: () => Promise<boolean>;
-}
 
 // Código de erro do Firebase (ex.: 'auth/popup-blocked') a partir do valor
 // solto que o catch recebe. Estreita de verdade em vez de assertar a forma:
@@ -298,46 +167,6 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     return list;
   };
 
-  const normalizeStoredOrder = (order: any): Order | null => {
-    if (!order) return null;
-    const statusText = String(order.status || '').toLowerCase();
-    const status =
-      statusText.includes('cancel') ? 'cancelled'
-      : statusText.includes('deliv') || statusText.includes('entreg') ? 'delivered'
-      : statusText.includes('ship') || statusText.includes('trans') ? 'shipped'
-      : statusText.includes('confirm') || statusText.includes('pago') ? 'confirmed'
-      : 'pending';
-
-    return {
-      ...order,
-      id: order.id || order.orderNumber || `order-${Date.now()}`,
-      orderNumber: order.orderNumber || order.id,
-      date: order.orderDate || order.date || order.syncedAt || new Date().toISOString(),
-      items: Array.isArray(order.items)
-        ? order.items.map((item: any) => ({
-            productName: item.productName || item.name || item.productId || 'Produto',
-            size: item.size || '',
-            quantity: Number(item.quantity) || 1,
-            price: Number(item.price) || 0,
-          }))
-        : [],
-      totalAmount: Number(order.totalAmount ?? order.totalPrice ?? order.total ?? 0),
-      paymentMethod: order.paymentMethod || '',
-      status,
-      shipping: order.shipping || {
-        cost: Number(order.shippingCost) || 0,
-        carrier: order.shippingCarrier || '',
-      },
-      shippingAddress: order.shippingAddress || {
-        name: order.name || '',
-        postalCode: order.postalCode || '',
-        prefecture: order.prefecture || '',
-        city: order.city || '',
-        address: order.address || '',
-        building: order.building || '',
-      },
-    };
-  };
 
   const getUserOrders = (userId: string, email?: string): Order[] => {
     const orderMap = new Map<string, Order>();
@@ -440,39 +269,6 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
   };
 
 
-  // Helper: fix old tracking URLs to use the correct format (direct results)
-  const fixTrackingUrl = (order: any): any => {
-    const trackingNumber = order.trackingNumber;
-    const savedUrl = order.trackingUrl || '';
-    let carrier = order.carrier || order.shipping?.carrier || '';
-    
-    // Detect carrier from saved URL if carrier field is empty
-    if (!carrier && savedUrl) {
-      if (savedUrl.includes('kuronekoyamato')) carrier = 'Yamato';
-      else if (savedUrl.includes('sagawa')) carrier = 'Sagawa';
-      else if (savedUrl.includes('japanpost')) carrier = 'Japan Post';
-      else if (savedUrl.includes('fukutsu')) carrier = 'Fukutsu';
-    }
-    
-    if (!trackingNumber || !carrier) return order;
-    
-    const lc = carrier.toLowerCase();
-    let newUrl = '';
-    if (lc.includes('yamato') || lc.includes('クロネコ')) {
-      newUrl = `https://toi.kuronekoyamato.co.jp/cgi-bin/tneko?number00=1&number01=${trackingNumber}`;
-    } else if (lc.includes('sagawa') || lc.includes('佐川')) {
-      newUrl = `https://k2k.sagawa-exp.co.jp/p/web/okurijosearch.do?okurijoNo=${trackingNumber}`;
-    } else if (lc.includes('japan post') || lc.includes('ゆうパック') || lc.includes('post')) {
-      newUrl = `https://trackings.post.japanpost.jp/services/srv/search/direct?reqCodeNo1=${trackingNumber}&locale=ja`;
-    } else if (lc.includes('fukutsu') || lc.includes('福通')) {
-      newUrl = `https://corp.fukutsu.co.jp/situation/tracking_no_hunt.html?tracking_no=${trackingNumber}`;
-    }
-    
-    if (newUrl) {
-      return { ...order, trackingUrl: newUrl, carrier: carrier };
-    }
-    return order;
-  };
 
   interface LoadedOrdersPage {
     items: Order[];
@@ -547,25 +343,6 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     }
   };
 
-  // Merge local + Firestore orders (deduplicate by orderNumber, Firestore takes priority)
-  const mergeOrders = (local: Order[], firestore: Order[]): Order[] => {
-    const map = new Map<string, Order>();
-    // Firestore orders first (source of truth, includes tracking data)
-    firestore.forEach(o => map.set(o.orderNumber, o));
-    // Local orders: merge but keep Firestore tracking fields if they exist
-    local.forEach(o => {
-      if (!map.has(o.orderNumber)) {
-        map.set(o.orderNumber, fixTrackingUrl(o));
-      } else {
-        // Firestore already has this order — keep Firestore version (has tracking data)
-        const existing = map.get(o.orderNumber)!;
-        map.set(o.orderNumber, fixTrackingUrl({ ...o, ...existing }));
-      }
-    });
-    return Array.from(map.values()).sort((a, b) =>
-      new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
-  };
 
   // Load user data from safeStorage on mount AND listen to Firebase auth
   useEffect(() => {

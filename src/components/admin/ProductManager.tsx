@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Pencil, Trash2, X, Image as ImageIcon, Loader2, PackageOpen, Sparkles, GripVertical, Save, Gift, Infinity as InfinityIcon, Search, Star } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Loader2, PackageOpen, Sparkles, Save, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSearchParams } from 'react-router-dom';
 import { FEATURES } from '@/config/features';
@@ -14,17 +14,14 @@ import { productService } from '@/services/productService';
 import { cloudinaryService } from '@/services/cloudinaryService';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/UserContext';
-import { PACKAGE_SAFETY_MARGIN_CM, sanitizePackageDimensions } from '@/utils/shippingDimensions';
-import { convertYen as fxConvertYen } from '@/services/fxService';
-import { formatPrice } from '@/utils/currency';
+import { sanitizePackageDimensions } from '@/utils/shippingDimensions';
 
 import { categoryService, DEFAULT_CATEGORIES, type ProductCategory } from '@/services/categoryService';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { authenticatedFetch } from '@/services/authenticatedFetch';
 import { errorMessage } from '@/utils/errorMessage';
-import { LocalStockFields } from '@/components/admin/LocalStockFields';
-import { VARIANT_PRESETS, UNIT_PRESETS, ALL_PRESETS, MAX_PHOTOS, MAX_VIDEO_MB } from '@/components/admin/productFormConstants';
-import { slugify, fileToCompressedDataURL, fileToThumbnailDataURL, urlToCompressedDataURL } from '@/utils/productImages';
+import { MAX_PHOTOS, MAX_VIDEO_MB } from '@/components/admin/productFormConstants';
+import { slugify, fileToCompressedDataURL, urlToCompressedDataURL } from '@/utils/productImages';
 import ProductVideoSection from '@/components/admin/product/ProductVideoSection';
 import ProductPhotosSection from '@/components/admin/product/ProductPhotosSection';
 import ProductDescriptionSection from '@/components/admin/product/ProductDescriptionSection';
