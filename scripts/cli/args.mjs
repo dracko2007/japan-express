@@ -23,7 +23,7 @@ const ALIASES = {
 };
 
 const NUMBERS = new Set(['limit', 'offset', 'value', 'days', 'usageLimit', 'minOrderValue']);
-const BOOLEANS = new Set(['hidden', 'freeShipping', 'active']);
+const BOOLEANS = new Set(['hidden', 'deleted', 'freeShipping', 'active']);
 
 /** Opções de `products.update` que viram campos de `set` (o que muda no produto). */
 const PRODUCT_SET = {
@@ -159,14 +159,14 @@ Configuração (variáveis de ambiente):
 Uso:  je <comando> [argumentos] [opções]
 
 Consulta
-  je health                              conta pedidos, clientes, produtos e cupons
+  je health                              conta pedidos, clientes, cupons e produtos (ativos/ocultos/apagados)
   je whoami                              a chave em uso: escopos e validade
   je stats                               resumo de vendas (o do Dashboard)
   je orders list [--status S] [--search T] [--limit N] [--offset N]
   je orders get <nº do pedido>
   je customers list [--search T] [--limit N] [--offset N]
   je customers get <e-mail>              perfil, login e pedidos
-  je products list [--category C] [--search T] [--hidden true] [--limit N] [--offset N]
+  je products list [--category C] [--search T] [--hidden true] [--deleted true] [--limit N] [--offset N]
   je products get <id>                   inclui o custo
   je coupons list
   je audit                               o que as chaves de API fizeram
