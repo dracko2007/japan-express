@@ -14,7 +14,7 @@ import {
   requiredText,
   sendError,
 } from './_lib/http.js';
-import { buildOrderEmail, MAIL_FROM_NOREPLY, sendMail, siteOrigin, unsubscribeUrl, wrapEmail } from './_lib/mailer.js';
+import { buildOrderEmail, sendMail, siteOrigin, unsubscribeUrl, wrapEmail } from './_lib/mailer.js';
 import { sendPush } from './_lib/push.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
 
@@ -54,10 +54,11 @@ async function accountTemplate(type, to, name) {
     }));
     const safeLink = escapeHtml(link);
     return {
-      // Confirmação de cadastro: único e-mail que sai do noreply.
-      from: MAIL_FROM_NOREPLY,
+      // Sem `from`: sai do remetente padrão (contato@mail.), o mesmo da confirmação de pedido,
+      // que chega na caixa de entrada. O noreply@ do domínio principal não tem histórico de envio
+      // e mandava só este e-mail para o spam (Gmail, Yahoo e Outlook).
       subject: 'Confirme seu e-mail - Japan Express',
-      html: wrapEmail(`<p>${salutation}</p><p>Obrigado por se cadastrar na Japan Express! Para ativar sua conta, confirme que este e-mail pertence a você:</p><p><a href="${safeLink}" style="${BUTTON_STYLE}">Confirmar meu e-mail</a></p><p style="font-size:13px;color:#666">O botão leva para japanexpress-store.com. Se você não criou esta conta, ignore esta mensagem.</p>`),
+      html: wrapEmail(`<p>${salutation}</p><p>Obrigado por se cadastrar na Japan Express! Para ativar sua conta, confirme que este e-mail pertence a você:</p><p><a href="${safeLink}" style="${BUTTON_STYLE}">Confirmar meu e-mail</a></p><p style="font-size:13px;color:#666">O botão leva para japanexpress-store.com. Se você não criou esta conta, ignore esta mensagem. Dúvidas? É só responder este e-mail.</p>`),
     };
   }
   if (type === 'reset') {
