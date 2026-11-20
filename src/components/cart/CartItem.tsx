@@ -16,9 +16,12 @@ import { localImage } from '@/utils/localImage';
 interface CartItemProps {
   item: CartItemType;
   couponDiscount?: number; // desconto proporcional do cupom neste item (na moeda exibida)
+  /** Marcado para comprar. Desmarcado = fica no carrinho, mas não entra no pedido. */
+  selected?: boolean;
+  onToggleSelected?: () => void;
 }
 
-const CartItemComponent: React.FC<CartItemProps> = ({ item, couponDiscount = 0 }) => {
+const CartItemComponent: React.FC<CartItemProps> = ({ item, couponDiscount = 0, selected = true, onToggleSelected }) => {
   const { updateQuantity, removeFromCart } = useCart();
   const { t, selectedCountry } = useLanguage();
   const isPromo = item.product.id.endsWith('_promo');
@@ -82,7 +85,16 @@ const CartItemComponent: React.FC<CartItemProps> = ({ item, couponDiscount = 0 }
   const productUrl = `/produto/${item.product.id}`;
 
   return (
-    <div className="flex gap-4 p-4 bg-card rounded-xl border border-border">
+    <div className={cn('flex gap-4 p-4 bg-card rounded-xl border border-border transition-opacity', onToggleSelected && !selected && 'opacity-60')}>
+      {onToggleSelected && (
+        <input
+          type="checkbox"
+          className="mt-1 h-5 w-5 shrink-0 self-start accent-pink-600 cursor-pointer"
+          checked={selected}
+          onChange={onToggleSelected}
+          aria-label={`Comprar ${productName}`}
+        />
+      )}
       {/* Image — clicável para ir à página do produto */}
       <Link to={productUrl} className="w-24 h-24 rounded-lg overflow-hidden bg-secondary/50 flex-shrink-0 hover:opacity-90 transition-opacity">
         {item.product.image ? (

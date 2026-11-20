@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CartItem } from '@/types';
 import { checkoutPointsCoverage, psFeeWaiver } from '@/utils/psFeeWaiver';
+import { recoveryCouponState } from '@/utils/recoveryCouponState';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -22,8 +23,8 @@ vi.mock('@/context/UserContext', () => ({
   useUser: () => ({ isAuthenticated: true }),
 }));
 vi.mock('@/context/CartContext', () => ({
-  useCart: () => ({
-    items: [{
+  useCart: () => {
+    const items = [{
       product: { id: 'produto-1', prices: { small: 1450 }, noPsFee: false, localStock: mocks.localStock },
       size: 'small',
       quantity: 1,
@@ -31,8 +32,9 @@ vi.mock('@/context/CartContext', () => ({
       product: { id: 'produto-2', prices: { small: 2380 }, noPsFee: false },
       size: 'small',
       quantity: 1,
-    } as unknown as CartItem] : [])],
-  }),
+    } as unknown as CartItem] : [])];
+    return { items, selectedItems: items };
+  },
 }));
 vi.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: mocks.toast }) }));
 vi.mock('@/services/newsletterService', () => ({
@@ -119,5 +121,54 @@ describe('ExitIntentPopup com resgate de pontos', () => {
 
     expect(screen.getByRole('button', { name: /economizar ¥ 1,000/ })).toBeTruthy();
     expect(screen.queryByText(/2,000/)).toBeNull();
+  });
+});
+
+describe('ExitIntentPopup com cupom de recuperação ativo', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-01T12:00:00Z'));
+    localStorage.clear();
+    sessionStorage.clear();
+    mocks.localStock = undefined;
+    mocks.extraJapanItem = false;
+    mocks.location.pathname = '/produtos';
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    mocks.location.pathname = '/checkout';
+  });
+
+  it('avisa que o cupom vale só para esta compra, com a contagem regressiva', () => {
+    recoveryCouponState.set({ code: 'CARRINHOBACK15-AB12', discountPercent: 15, endsAt: Date.now() + 23 * 3_600_000 + 59 * 60_000 });
+    render(<ExitIntentPopup />);
+
+    triggerDesktopExit();
+
+    expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe('Seu cupom está ativo');
+    expect(screen.getByText(/apenas para esta compra/i)).toBeTruthy();
+    expect(screen.getByRole('timer').textContent).toMatch(/^23:5[89]:\d\d$/);
+  });
+
+  it('só aparece uma vez por sessão', () => {
+    recoveryCouponState.set({ code: 'CARRINHOBACK15-AB12', discountPercent: 15, endsAt: Date.now() + 3_600_000 });
+    render(<ExitIntentPopup />);
+    triggerDesktopExit();
+    fireEvent.click(screen.getByText('Continuar navegando'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    fireEvent.mouseOut(document, { clientY: 0, relatedTarget: null });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('sem cupom ativo (ou com a janela vencida) não mostra esse aviso', () => {
+    recoveryCouponState.set({ code: 'CARRINHOBACK15-AB12', discountPercent: 15, endsAt: Date.now() - 1000 });
+    render(<ExitIntentPopup />);
+
+    triggerDesktopExit();
+
+    expect(screen.queryByText(/apenas para esta compra/i)).toBeNull();
   });
 });

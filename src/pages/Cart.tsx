@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ShoppingBag, ArrowRight, Trash2, Tag, ShieldCheck, Sparkles, AlertCircle } from 'lucide-react';
 import Layout from '@/components/layout/Layout';
@@ -25,6 +25,8 @@ import { setShipAllFromJapan } from '@/utils/localStock';
 import { computeCouponDiscount } from '@/utils/couponDiscount';
 import { recoveryErrorMessage } from '@/services/recoveryCouponService';
 import { useRecoveryLink } from '@/hooks/useRecoveryLink';
+import RecoveryCountdown from '@/components/cart/RecoveryCountdown';
+import { recoveryCouponState, type RecoveryCouponState } from '@/utils/recoveryCouponState';
 import { taxDisclosure } from '../../shared/tax-disclosure.js';
 
 // Converte um afiliado num "cupom" aplicável (carrega o código para gerar comissão)
@@ -44,7 +46,9 @@ const affiliateToCoupon = (aff: AffiliateCouponInfo, productId?: string | null, 
 });
 
 const Cart: React.FC = () => {
-  const { items, clearCart, addToCart, removeFromCart } = useCart();
+  // `allItems` = tudo que está no carrinho; `items` = só o que está marcado para comprar. Totais, cupom, frete e
+  // checkout usam `items`; a lista na tela mostra `allItems`.
+  const { items: allItems, selectedItems: items, isItemSelected, toggleItemSelected, setAllItemsSelected, clearCart, addToCart, removeFromCart } = useCart();
   const { products } = useProducts();
   const { t, language, selectedCountry, setSelectedCountry } = useLanguage();
   const { isAuthenticated, authReady, validateProfileCoupon, coupons, user } = useUser();
@@ -147,29 +151,57 @@ const Cart: React.FC = () => {
     );
   };
 
+  // Cupom de recuperação aberto pelo e-mail e ainda dentro da janela de 24 h. Fica guardado no aparelho:
+  // o cliente pode sair para juntar outros produtos e, ao voltar ao carrinho, o cupom continua valendo.
+  const [recoveryState, setRecoveryState] = useState<RecoveryCouponState | null>(() => recoveryCouponState.get());
+  const recoveryCouponObject = (state: RecoveryCouponState): Coupon => ({
+    id: `recovery-${state.code}`,
+    code: state.code,
+    description: state.description || `Recuperação de carrinho — ${state.discountPercent}% OFF`,
+    discount: state.discountPercent,
+    discountType: 'percentage',
+    expiresAt: state.expiryDate || new Date(state.endsAt).toISOString(),
+    isUsed: false,
+  });
+  const expireRecovery = () => {
+    recoveryCouponState.clear();
+    setRecoveryState(null);
+    setActiveCoupon((current) => (current?.id?.startsWith('recovery-') ? null : current));
+    setCouponError(recoveryErrorMessage('recovery_window_closed'));
+  };
+
   // E-mail "seu carrinho ainda está esperando" (/carrinho?rec=...): o desconto entra sozinho ao abrir o link.
-  const { endsAt: recoveryEndsAt } = useRecoveryLink({
+  useRecoveryLink({
     authReady,
     isAuthenticated,
     onOpened: (coupon, windowEndsAt) => {
-      applyCouponObject({
-        id: `recovery-${coupon.code}`,
+      const state: RecoveryCouponState = {
         code: coupon.code,
-        description: coupon.description || `Recuperação de carrinho — ${coupon.discountPercent}% OFF`,
-        discount: coupon.discountPercent,
-        discountType: 'percentage',
-        expiresAt: coupon.expiryDate || new Date(windowEndsAt).toISOString(),
-        isUsed: false,
-      });
-      toast({ title: `${coupon.discountPercent}% de desconto aplicado`, description: 'Finalize nesta visita: o cupom vale por 2 horas depois de abrir o e-mail.' });
+        discountPercent: coupon.discountPercent,
+        description: coupon.description,
+        expiryDate: coupon.expiryDate,
+        endsAt: windowEndsAt,
+      };
+      recoveryCouponState.set(state);
+      setRecoveryState(state);
+      applyCouponObject(recoveryCouponObject(state));
+      toast({ title: `${coupon.discountPercent}% de desconto aplicado`, description: 'O cupom vale por 24 horas depois de abrir o e-mail, para um pedido só. A contagem aparece no resumo.' });
     },
     onError: setCouponError,
     // Janela vencida na própria tela: tira o cupom (o servidor recusaria de qualquer jeito).
-    onExpired: () => {
-      setActiveCoupon((current) => (current?.id?.startsWith('recovery-') ? null : current));
-      setCouponError(recoveryErrorMessage('recovery_window_closed'));
-    },
+    onExpired: expireRecovery,
   });
+
+  // Voltou ao carrinho depois de navegar por outros produtos: reaplica o cupom ainda válido (uma vez só
+  // por visita ao carrinho; se o cliente o remover de propósito, não reaparece sozinho).
+  const recoveryRestored = useRef(false);
+  useEffect(() => {
+    if (recoveryRestored.current || !recoveryState) return;
+    recoveryRestored.current = true;
+    if (searchParams.get('rec')) return; // link novo do e-mail: o fluxo acima aplica
+    setActiveCoupon((current) => current ?? recoveryCouponObject(recoveryState));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Aplica automaticamente o código de indicação vindo do link (?ref=CODE)
   useEffect(() => {
@@ -201,7 +233,7 @@ const Cart: React.FC = () => {
   useEffect(() => {
     const addId = searchParams.get('add');
     if (!addId || products.length === 0) return;
-    if (items.some((i) => i.product.id === addId)) return;
+    if (allItems.some((i) => i.product.id === addId)) return;
     const produto = products.find((p) => p.id === addId);
     if (!produto) return;
     // Mesma convenção do card da vitrine: primeira variante, ou 'small' nos
@@ -209,7 +241,7 @@ const Cart: React.FC = () => {
     const variante = produto.variants?.[0];
     addToCart(produto, variante?.id || 'small', 1, variante?.label);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, products, items]);
+  }, [searchParams, products, allItems]);
 
   // Campanha promocional (?promo=CODE): armPending (compartilhado com a página
   // do produto) valida e arma preço original/brinde/pontos; aqui aplicamos só
@@ -290,15 +322,14 @@ const Cart: React.FC = () => {
   const promoSubtotal = items.reduce(
     (sum, item) => (!item.freeGift && isPromoItem(item)) ? sum + unitOf(item) * item.quantity : sum, 0
   );
-  const affiliateCoupon = Boolean(activeCoupon?.affiliateCode);
+  // Cupom nenhum acumula com desconto da loja: a base só tem itens sem promoção e sem desconto.
+  const couponWithProductDiscount = Boolean(activeCoupon && !activeCoupon.freeShipping);
   const regularSubtotal = items.reduce(
-    (sum, item) => {
-      const hasPageDiscount = pageDiscounted(item);
-      return (!item.freeGift && !isPromoItem(item) && (!affiliateCoupon || !hasPageDiscount))
-        ? sum + unitOf(item) * item.quantity
-        : sum;
-    }, 0
+    (sum, item) => (!item.freeGift && !isPromoItem(item) && !pageDiscounted(item))
+      ? sum + unitOf(item) * item.quantity
+      : sum, 0
   );
+  const hasCouponExcludedItems = items.some((item) => !item.freeGift && (isPromoItem(item) || pageDiscounted(item)));
   const baseTotalPrice = promoSubtotal + regularSubtotal;
   const hasPromoItems = promoSubtotal > 0;
   const baseDoCupom = promoProductId
@@ -310,9 +341,6 @@ const Cart: React.FC = () => {
   const discountedItemCount = items.filter((item) =>
     !item.freeGift && (isPromoItem(item) || (item.product.discountPercent || 0) > 0)
   ).length;
-  const affiliateDiscountedItemCount = affiliateCoupon
-    ? items.filter((item) => !item.freeGift && !isPromoItem(item) && (item.product.discountPercent || 0) > 0).length
-    : 0;
   const discountAmount = activeCoupon ? computeDiscount(activeCoupon, baseDoCupom) : 0;
 
   // Resgate de pontos: 1 ponto = ¥1, limitado ao valor dos produtos (em ¥)
@@ -356,7 +384,11 @@ const Cart: React.FC = () => {
   // "Enviar separado" = UM pedido e um pagamento, com dois envios (cada um com seu frete);
   // "Tudo junto do Japão" = um envio só, tudo com o preço e o frete do Japão. Nada sai do carrinho.
   const [mixedChoice, setMixedChoice] = useState<Record<string, unknown> | null>(null);
+  // Itens que podem ser marcados (brindes não: acompanham os itens marcados) e quantos estão marcados.
+  const selectableCount = allItems.filter((i) => !i.freeGift).length;
+  const purchasableCount = items.filter((i) => !i.freeGift).length;
   const goCheckout = (state: Record<string, unknown>) => {
+    if (purchasableCount === 0) return; // nada marcado: o botão já fica desabilitado
     if (localCart.split.kind === 'mixed' && !localCart.forcedJapan) { setMixedChoice(state); return; }
     navigate('/checkout', { state });
   };
@@ -420,8 +452,8 @@ const Cart: React.FC = () => {
               {t('cart.title')} {selectedCountry === 'Japão' ? '🇯🇵' : selectedCountry === 'Brasil' ? '🇧🇷' : selectedCountry === 'Portugal' ? '🇵🇹' : selectedCountry === 'França' ? '🇫🇷' : selectedCountry === 'Itália' ? '🇮🇹' : selectedCountry === 'Espanha' ? '🇪🇸' : ''}
             </h1>
             <p className="text-muted-foreground text-lg">
-              {items.length > 0
-                ? `${items.length} ${items.length === 1 ? t('cart.items') : t('cart.items_plural')}`
+              {allItems.length > 0
+                ? `${allItems.length} ${allItems.length === 1 ? t('cart.items') : t('cart.items_plural')}`
                 : t('cart.empty')
               }
             </p>
@@ -431,7 +463,7 @@ const Cart: React.FC = () => {
 
       <section className="py-12 bg-background">
         <div className="container mx-auto px-4">
-          {items.length > 0 ? (
+          {allItems.length > 0 ? (
             <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8 min-w-0">
               {/* Cart Items List */}
               <div className="lg:col-span-2 space-y-4 min-w-0">
@@ -459,24 +491,42 @@ const Cart: React.FC = () => {
                     </Button>
                   </div>
                 </div>
-                {affiliateCoupon && discountedItemCount > 0 && (
+                {/* Marcar o que vai ser comprado: o resto fica no carrinho para depois. */}
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm">
+                  <label className="flex items-center gap-2 font-semibold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-pink-600"
+                      checked={purchasableCount === selectableCount && selectableCount > 0}
+                      ref={(el) => { if (el) el.indeterminate = purchasableCount > 0 && purchasableCount < selectableCount; }}
+                      onChange={(e) => setAllItemsSelected(e.target.checked)}
+                      aria-label="Selecionar todos os itens para comprar"
+                    />
+                    Selecionar todos
+                  </label>
+                  <span className="text-xs text-muted-foreground" role="status">
+                    {purchasableCount} de {selectableCount} {selectableCount === 1 ? 'item marcado' : 'itens marcados'} para comprar
+                  </span>
+                </div>
+                {couponWithProductDiscount && discountedItemCount > 0 && (
                   <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
                     <p className="font-bold">🏷️ Produto(s) com desconto promocional</p>
                     <p className="mt-0.5">
-                      {discountedItemCount} item(ns) já está(ão) com desconto da loja. O cupom de afiliado só é aplicado nos produtos fora da promoção; descontos não são acumulados.
+                      {discountedItemCount} item(ns) já está(ão) com desconto da loja. O cupom só é aplicado nos produtos fora da promoção; descontos não são acumulados.
                     </p>
                   </div>
                 )}
 
 
 
-                {items.map((item) => {
+                {allItems.map((item) => {
                   // Desconto proporcional por item regular (cupom não se aplica a itens promo)
                   const itemIsPromo = item.product.id.endsWith('_promo');
+                  const itemSelected = isItemSelected(item);
                   const itemSubtotal = item.freeGift || itemIsPromo ? 0
                     : fxConvert(effectiveYen(item.product, item.size), currency) * item.quantity;
-                  const itemDiscount = (!itemIsPromo && activeCoupon && regularSubtotal > 0
-                    && (!activeCoupon.affiliateCode || !(item.product.discountPercent || 0)))
+                  const itemDiscount = (itemSelected && !itemIsPromo && activeCoupon && regularSubtotal > 0
+                    && !pageDiscounted(item))
                     ? discountAmount * (itemSubtotal / regularSubtotal)
                     : 0;
                   return (
@@ -484,6 +534,8 @@ const Cart: React.FC = () => {
                       key={`${item.product.id}-${item.size}${item.freeGift ? '-gift' : ''}`}
                       item={item}
                       couponDiscount={itemDiscount}
+                      selected={itemSelected}
+                      onToggleSelected={() => toggleItemSelected(item.product.id, item.size)}
                     />
                   );
                 })}
@@ -549,11 +601,17 @@ const Cart: React.FC = () => {
                 <div className="bg-card rounded-2xl border border-border p-6 sticky top-24 space-y-6 shadow-sm min-w-0">
                   <h3 className="font-sans text-lg font-bold text-foreground">{t('cart.summary')}</h3>
 
-                  {recoveryEndsAt && (
-                    <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                      Cupom de recuperação aplicado. Ele vale até <strong>{new Date(recoveryEndsAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong> e para um pedido só.
-                      Se sair sem comprar, o cupom é perdido.
-                    </p>
+                  {recoveryState && (
+                    <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                      <p>
+                        Cupom de recuperação <strong>{recoveryState.code}</strong> ({recoveryState.discountPercent}% OFF).
+                        Vale para <strong>uma compra só</strong>, também se você juntar outros produtos, e só nos itens sem desconto da loja.
+                      </p>
+                      <p className="mt-1.5 flex items-center gap-1.5">
+                        <span>Acaba em</span>
+                        <RecoveryCountdown endsAt={recoveryState.endsAt} onExpire={expireRecovery} className="font-mono text-base font-black tabular-nums text-amber-900" />
+                      </p>
+                    </div>
                   )}
 
                   {/* Coupon Application Input + lista de cupons disponíveis */}
@@ -660,14 +718,14 @@ const Cart: React.FC = () => {
                             🎁 {promoBreakdown}
                           </p>
                         )}
-                        {affiliateCoupon && hasPromoItems && regularSubtotal === 0 && (
+                        {couponWithProductDiscount && hasCouponExcludedItems && regularSubtotal === 0 && (
                           <p className="text-[11px] text-pink-600 font-semibold bg-pink-50 border border-pink-200 rounded-lg px-2 py-1.5 leading-snug">
-                            ⚠️ Todos os itens já têm desconto promocional. O cupom não foi aplicado.
+                            ⚠️ Todos os itens já têm desconto da loja. O cupom não foi aplicado.
                           </p>
                         )}
-                        {affiliateCoupon && hasPromoItems && regularSubtotal > 0 && (
+                        {couponWithProductDiscount && hasCouponExcludedItems && regularSubtotal > 0 && (
                           <p className="text-[11px] text-blue-600 font-medium bg-blue-50 border border-blue-200 rounded-lg px-2 py-1.5 leading-snug">
-                            ℹ️ Cupom aplicado apenas aos itens sem promoção ({formatPrice(regularSubtotal, currency, localCart.anyLocal)}). Itens com preço promocional não acumulam desconto.
+                            ℹ️ Cupom aplicado apenas aos itens sem desconto da loja ({formatPrice(regularSubtotal, currency, localCart.anyLocal)}). Itens com preço promocional não acumulam desconto.
                           </p>
                         )}
                       </div>
@@ -723,9 +781,20 @@ const Cart: React.FC = () => {
                       O funil mostrava o resultado: 146 visitas ao carrinho e 139
                       ao cadastro — quase todo mundo empurrado a criar conta.
                       Os dois caminhos agora têm o mesmo peso visual. */}
+                  {purchasableCount === 0 && (
+                    <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-center text-xs font-semibold text-amber-800">
+                      Marque ao menos um item para finalizar a compra.
+                    </p>
+                  )}
+                  {purchasableCount > 0 && purchasableCount < selectableCount && (
+                    <p className="text-center text-[11px] text-muted-foreground">
+                      {selectableCount - purchasableCount} {selectableCount - purchasableCount === 1 ? 'item desmarcado continua' : 'itens desmarcados continuam'} no carrinho e não entra neste pedido.
+                    </p>
+                  )}
                   {isAuthenticated ? (
                     <Button
                       className="w-full btn-primary rounded-xl py-6 text-lg font-bold"
+                      disabled={purchasableCount === 0}
                       onClick={() => goCheckout({ coupon: activeCoupon })}
                     >
                       {t('cart.checkout')}
@@ -735,6 +804,7 @@ const Cart: React.FC = () => {
                     <div className="space-y-2">
                       <Button
                         className="w-full btn-primary rounded-xl py-6 text-lg font-bold"
+                        disabled={purchasableCount === 0}
                         onClick={() => goCheckout({ coupon: activeCoupon, isGuest: true })}
                       >
                         {t('cart.checkoutGuest')}
@@ -743,6 +813,7 @@ const Cart: React.FC = () => {
                       <Button
                         variant="outline"
                         className="w-full rounded-xl py-5 text-base font-semibold"
+                        disabled={purchasableCount === 0}
                         onClick={() => goCheckout({ coupon: activeCoupon })}
                       >
                         {t('cart.checkoutAccount')}

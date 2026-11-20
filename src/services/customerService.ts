@@ -371,8 +371,8 @@ export const customerService = {
     };
   },
 
-  // Exclui a conta/perfil de um cliente (localStorage + Firestore). Os pedidos
-  // (coleção 'orders') ficam como registro financeiro. Sucesso = Firestore.
+  // Exclui a conta de um cliente: login (Firebase Auth) + perfil (Firestore) + cópia local. Os pedidos
+  // (coleção 'orders') ficam como registro financeiro. Sucesso = login e Firestore apagados.
   async deleteCustomer(email: string): Promise<boolean> {
     try {
       const usersData = safeStorage.getItem('japan-express-users');
@@ -385,6 +385,24 @@ export const customerService = {
       }
     } catch (error) {
       devError('❌ Erro ao deletar cliente (local):', error);
+    }
+
+    // 1º o login (Firebase Auth), 2º o perfil (Firestore). Nessa ordem: se o login falhar, o cliente
+    // continua na lista e dá para tentar de novo. No sentido inverso sobrava um login sem perfil — o
+    // e-mail ficava "já cadastrado" e o cliente não conseguia nem entrar nem se recadastrar.
+    try {
+      const res = await authenticatedFetch('/api/admin?action=customer-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      if (!res.ok) {
+        devError('❌ Erro ao deletar cliente (login):', res.status);
+        return false;
+      }
+    } catch (error) {
+      devError('❌ Erro ao deletar cliente (login):', error);
+      return false;
     }
 
     // Remove também do Firestore (senão reaparece ao recarregar)

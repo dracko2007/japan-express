@@ -135,7 +135,7 @@ describe('recuperação de carrinho', () => {
     const c = mocks.set.mock.calls[0][0];
     expect(c.recovery).toBe(true);
     expect(c.recoveryOwnerUid).toBe('uid1');
-    expect(c.recoveryWindowMs).toBe(2 * 60 * 60 * 1000);
+    expect(c.recoveryWindowMs).toBe(24 * 60 * 60 * 1000);
     expect(c.openedAt).toBeNull();
     expect(c.windowEndsAt).toBeNull();
   });
@@ -151,7 +151,7 @@ describe('recuperação de carrinho', () => {
     expect(param.startsWith(`${c.code}.`)).toBe(true);
     // A chave não é o código: quem só tem o código impresso não consegue montar o link.
     expect(param.slice(c.code.length + 1)).toMatch(/^[A-Za-z0-9_-]{32}$/);
-    expect(html).toMatch(/2 horas/);
+    expect(html).toMatch(/24 horas/);
     expect(html).toMatch(/uma vez por CPF/);
   });
   

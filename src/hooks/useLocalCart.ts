@@ -7,11 +7,12 @@ import { localOffer, shipAllFromJapan, splitCart } from '@/utils/localStock';
 const keyOf = (item: CartItem) => `${item.product.id}|${item.size}`;
 
 /**
- * Como o carrinho atual se divide entre itens que já estão no país do cliente
- * e itens que vêm do Japão, e qual preço cada linha mostra.
+ * Como o que vai ser COMPRADO (itens marcados) se divide entre itens que já estão no país do cliente
+ * e itens que vêm do Japão, e qual preço cada linha mostra. Item desmarcado não entra na decisão do
+ * pedido, mas mostra o preço que teria se fosse comprado junto com os demais.
  */
 export function useLocalCart() {
-  const { items } = useCart();
+  const { items: allItems, selectedItems: items, isItemSelected } = useCart();
   const { selectedCountry } = useLanguage();
   const [forcedJapan, setForcedJapan] = useState(shipAllFromJapan);
   useEffect(() => {
@@ -23,9 +24,15 @@ export function useLocalCart() {
   return useMemo(() => {
     const split = splitCart(items, selectedCountry);
     const localKeys = new Set(forcedJapan ? [] : split.localItems.map(keyOf));
+    // Linha desmarcada: usa a divisão do carrinho todo só para mostrar o preço dela.
+    const displayKeys = items.length === allItems.length
+      ? localKeys
+      : new Set(forcedJapan ? [] : splitCart(allItems, selectedCountry).localItems.map(keyOf));
     /** Preço fixo local da linha, ou null quando vale a conta do Japão. */
-    const localPrice = (item: CartItem): number | null =>
-      (localKeys.has(keyOf(item)) ? localOffer(item.product, selectedCountry)?.price ?? null : null);
+    const localPrice = (item: CartItem): number | null => {
+      const keys = isItemSelected(item) ? localKeys : displayKeys;
+      return keys.has(keyOf(item)) ? localOffer(item.product, selectedCountry)?.price ?? null : null;
+    };
     return {
       split,
       forcedJapan,
@@ -36,5 +43,5 @@ export function useLocalCart() {
       anyLocal: split.kind !== 'japan' && !forcedJapan,
       country: selectedCountry,
     };
-  }, [items, selectedCountry, forcedJapan]);
+  }, [items, allItems, isItemSelected, selectedCountry, forcedJapan]);
 }

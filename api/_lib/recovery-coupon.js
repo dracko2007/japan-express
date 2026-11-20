@@ -3,15 +3,15 @@
 //  - O código é por pessoa e por abandono (HMAC): `CARRINHOBACK15-A1B2C3D4E5`.
 //  - Só vale se a pessoa ABRIR o link do e-mail (`/carrinho?rec=<código>.<chave>`). Digitar o
 //    código no carrinho não basta: a chave do link é diferente do código e só vai no botão.
-//  - Abrir o link começa uma janela (2 h). Passou da janela sem comprar, o cupom morre e o link
-//    não abre de novo. A janela dá tempo de pagar com PIX/Wise em outro app, que é o jeito
-//    comum de pagar na loja; invalidar ao fechar a aba puniria exatamente esse cliente.
+//  - Abrir o link começa uma janela (24 h, com contagem regressiva na tela). Passou da janela sem
+//    comprar, o cupom morre e o link não abre de novo. Dentro dela o cliente pode navegar, juntar
+//    outros produtos e pagar com PIX/Wise em outro app; o cupom é de UM pedido (um uso por CPF).
 //  - Um uso por CPF (ou por conta, fora do Brasil): ver `cpf_index.recoveryCouponCode`
 //    (orders.js ao criar o pedido e fulfillment.js ao confirmar o pagamento).
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { HttpError } from './http.js';
 
-export const RECOVERY_WINDOW_MS = 2 * 60 * 60 * 1000;
+export const RECOVERY_WINDOW_MS = 24 * 60 * 60 * 1000;
 export const RECOVERY_CODE_PREFIX = 'CARRINHOBACK';
 
 function secret() {
@@ -97,8 +97,11 @@ export async function openRecoveryCoupon(db, { link, user, now = Date.now() }) {
     if (state === 'open') return { code, coupon: data, windowEndsAt: Number(data.windowEndsAt), replay: true };
 
     const windowEndsAt = now + (Number(data.recoveryWindowMs) || RECOVERY_WINDOW_MS);
-    transaction.update(ref, { openedAt: now, windowEndsAt, openedByUid: user.uid });
-    return { code, coupon: { ...data, openedAt: now, windowEndsAt }, windowEndsAt, replay: false };
+    // A validade geral do cupom (`expiryDate`, conferida ao criar o pedido) nunca pode fechar antes da
+    // janela: quem abre o link perto do fim do prazo do e-mail ainda tem as 24 h inteiras.
+    const expiryDate = new Date(Math.max(Date.parse(data.expiryDate), windowEndsAt)).toISOString();
+    transaction.update(ref, { openedAt: now, windowEndsAt, openedByUid: user.uid, expiryDate });
+    return { code, coupon: { ...data, openedAt: now, windowEndsAt, expiryDate }, windowEndsAt, replay: false };
   });
 
   if (outcome.closed) {

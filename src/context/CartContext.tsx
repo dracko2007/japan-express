@@ -1,4 +1,8 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '@/config/firebase';
+import { loadRemoteCart, saveRemoteCart, registerCartFlush } from '@/services/cartSyncService';
+import { mergeCarts, toRemoteCart } from '@/utils/cartMerge';
 import { CartItem, Product } from '@/types';
 import { safeStorage } from '@/utils/storage';
 import { SESSION_END_EVENT } from '@/utils/localData';
@@ -7,6 +11,19 @@ import { trackAddToCart } from '@/lib/analytics';
 import { useProducts } from '@/context/ProductsContext';
 
 const CART_STORAGE_KEY = 'sakura_cart';
+const UNSELECTED_STORAGE_KEY = 'sakura_cart_unselected';
+
+/** Identifica uma linha do carrinho (produto + tamanho) na lista de desmarcados. */
+const lineKey = (productId: string, size: string) => `${productId}|${size}`;
+
+const loadUnselected = (): string[] => {
+  try {
+    const parsed: unknown = JSON.parse(safeStorage.getItem(UNSELECTED_STORAGE_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === 'string') : [];
+  } catch {
+    return [];
+  }
+};
 
 // Limite de quantidade de um produto no carrinho: estoque real, ou sem
 // limite quando o produto é ilimitado (ou não tem controle de estoque).
@@ -40,6 +57,15 @@ interface CartContextType {
   removeFromCart: (productId: string, size: string) => void;
   updateQuantity: (productId: string, size: string, quantity: number) => void;
   clearCart: () => void;
+  /** Itens que vão ser comprados (os marcados + brindes). `items` continua sendo tudo que está no carrinho. */
+  selectedItems: CartItem[];
+  /** Soma em ¥ só dos itens marcados (`totalPrice` continua somando o carrinho todo). */
+  selectedTotalPrice: number;
+  isItemSelected: (item: CartItem) => boolean;
+  toggleItemSelected: (productId: string, size: string) => void;
+  setAllItemsSelected: (selected: boolean) => void;
+  /** Pedido feito: tira do carrinho só o que foi comprado; o que ficou desmarcado continua lá. */
+  removePurchasedItems: () => void;
   totalItems: number;
   totalPrice: number;
   getSpaceUsed: () => { small: number; large: number; totalSmallEquivalent: number };
@@ -49,6 +75,8 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [rawItems, setRawItems] = useState<CartItem[]>(loadCart);
+  // Linhas que o cliente deixou no carrinho mas NÃO quer comprar agora. O padrão é marcado: item novo entra marcado.
+  const [unselected, setUnselected] = useState<string[]>(loadUnselected);
   const { products } = useProducts();
 
   // Reage a armar/desarmar o resgate promocional (Cart.tsx dispara o evento) —
@@ -65,13 +93,87 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     safeStorage.setItem(CART_STORAGE_KEY, JSON.stringify(rawItems));
   }, [rawItems]);
 
+  // Linha que saiu do carrinho não pode deixar "desmarcado" para trás: se o produto voltar, entra marcado.
+  useEffect(() => {
+    setUnselected((current) => {
+      const present = new Set(rawItems.map((i) => lineKey(i.product.id, i.size)));
+      const next = current.filter((key) => present.has(key));
+      return next.length === current.length ? current : next;
+    });
+  }, [rawItems]);
+  useEffect(() => {
+    safeStorage.setItem(UNSELECTED_STORAGE_KEY, JSON.stringify(unselected));
+  }, [unselected]);
+
+  const unselectedSet = useMemo(() => new Set(unselected), [unselected]);
+  const isItemSelected = useCallback(
+    (item: CartItem) => item.freeGift === true || !unselectedSet.has(lineKey(item.product.id, item.size)),
+    [unselectedSet],
+  );
+  // Brindes dependem do que vai ser COMPRADO: item desmarcado não gera brinde.
+  const purchaseRawItems = useMemo(() => rawItems.filter(isItemSelected), [rawItems, isItemSelected]);
+
+  // ── Carrinho por conta (Firestore `carts/{uid}`) ─────────────────────────────────────────────
+  // Quem está logado tem o carrinho guardado na conta: sair e entrar de novo (ou entrar em outro aparelho)
+  // devolve os itens. Quem não está logado continua só com o localStorage.
+  const [syncUid, setSyncUid] = useState<string | null>(null);
+  // Só grava depois de ler a nuvem e mesclar: senão um carrinho vazio deste aparelho apagaria o da conta.
+  const [hydratedUid, setHydratedUid] = useState<string | null>(null);
+  const latest = useRef({ rawItems, unselected });
+  latest.current = { rawItems, unselected };
+
+  useEffect(() => {
+    if (!auth) return;
+    return onAuthStateChanged(auth, (firebaseUser) => {
+      // Admin usa conta interna (`admin_*`) e não tem carrinho de compras.
+      const uid = firebaseUser && !firebaseUser.isAnonymous && !firebaseUser.uid.startsWith('admin_') ? firebaseUser.uid : null;
+      setSyncUid(uid);
+      if (!uid) setHydratedUid(null);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!syncUid || hydratedUid === syncUid || !products.length) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const remote = await loadRemoteCart(syncUid);
+        if (cancelled) return;
+        const merged = mergeCarts(latest.current.rawItems, latest.current.unselected, remote, products, getMaxQty);
+        setRawItems(merged.items);
+        setUnselected(merged.unselected);
+        setHydratedUid(syncUid);
+      } catch (error) {
+        // Sem ler a nuvem NÃO grava (não risca sobrescrever o carrinho da conta): segue só com o aparelho.
+        if (import.meta.env.DEV) console.warn('[cart-sync] não consegui ler o carrinho da conta:', error);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [syncUid, hydratedUid, products]);
+
+  useEffect(() => {
+    if (!syncUid || hydratedUid !== syncUid) return;
+    const timer = window.setTimeout(() => {
+      void saveRemoteCart(syncUid, toRemoteCart(rawItems, unselected)).catch((error) => {
+        if (import.meta.env.DEV) console.warn('[cart-sync] não consegui gravar o carrinho:', error);
+      });
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [rawItems, unselected, syncUid, hydratedUid]);
+
+  // Quem vai sair da conta chama isto antes: grava já a última alteração, sem esperar o atraso.
+  useEffect(() => registerCartFlush(async () => {
+    if (!syncUid || hydratedUid !== syncUid) return;
+    await saveRemoteCart(syncUid, toRemoteCart(latest.current.rawItems, latest.current.unselected));
+  }), [syncUid, hydratedUid]);
+
   // Gift items are fully derived — no state, no loops
   const giftItems = useMemo<CartItem[]>(() => {
     if (!products.length) return [];
-    const totalYen = rawItems.reduce((s, i) => s + effectiveYen(i.product, i.size) * i.quantity, 0);
+    const totalYen = purchaseRawItems.reduce((s, i) => s + effectiveYen(i.product, i.size) * i.quantity, 0);
     const gifts: CartItem[] = [];
     const addedGiftIds = new Set<string>();
-    for (const item of rawItems) {
+    for (const item of purchaseRawItems) {
       const pg = item.product.promoGift;
       if (!pg || pg.buyQuantity <= 0 || !pg.giftProductId) continue;
       if (item.quantity < pg.buyQuantity) continue;
@@ -95,7 +197,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const raw = safeStorage.getItem('pending_promo_gift');
       if (raw) {
         const g = JSON.parse(raw);
-        if (g && g.productId && rawItems.some(i => i.product.id === g.productId)) {
+        if (g && g.productId && purchaseRawItems.some(i => i.product.id === g.productId)) {
           const giftId = g.giftProductId || g.productId;
           if (!addedGiftIds.has(giftId)) {
             const giftProduct = products.find(p => p.id === giftId);
@@ -116,7 +218,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch { /* JSON inválido — ignora */ }
     return gifts;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawItems, products, promoTick]);
+  }, [purchaseRawItems, products, promoTick]);
 
   // Campanha promocional com "manter desconto inicial" DESMARCADO: o produto
   // qualificante volta ao preço ORIGINAL (discountPercent zerado) enquanto o
@@ -140,6 +242,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // All items exposed to consumers = regular + auto-gifts
   const items = useMemo(() => [...adjustedItems, ...giftItems], [adjustedItems, giftItems]);
+  // O que vai ser comprado: marcados + brindes (que só existem para os marcados).
+  const selectedItems = useMemo(() => [...adjustedItems.filter(isItemSelected), ...giftItems], [adjustedItems, giftItems, isItemSelected]);
 
   const addToCart = useCallback((product: Product, size: string, quantity = 1, variantLabel?: string) => {
     setRawItems(prev => {
@@ -193,9 +297,24 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setRawItems([]);
   }, []);
 
+  const toggleItemSelected = useCallback((productId: string, size: string) => {
+    const key = lineKey(productId, size);
+    setUnselected((current) => (current.includes(key) ? current.filter((k) => k !== key) : [...current, key]));
+  }, []);
+
+  const setAllItemsSelected = useCallback((selected: boolean) => {
+    setUnselected(selected ? [] : rawItems.map((i) => lineKey(i.product.id, i.size)));
+  }, [rawItems]);
+
+  const removePurchasedItems = useCallback(() => {
+    setRawItems((prev) => prev.filter((item) => unselectedSet.has(lineKey(item.product.id, item.size))));
+  }, [unselectedSet]);
+
   // Limpa o carrinho quando o usuário faz logout (evento disparado pelo UserContext)
   useEffect(() => {
-    const onLogout = () => setRawItems([]);
+    // Sair da conta limpa este aparelho (computador compartilhado), mas NUNCA grava o carrinho vazio na conta:
+    // `hydratedUid` volta a null na mesma atualização, e o efeito de gravação só roda hidratado.
+    const onLogout = () => { setHydratedUid(null); setRawItems([]); };
     window.addEventListener(SESSION_END_EVENT, onLogout);
     return () => window.removeEventListener(SESSION_END_EVENT, onLogout);
   }, []);
@@ -210,16 +329,20 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     () => adjustedItems.reduce((sum, item) => sum + effectiveYen(item.product, item.size) * item.quantity, 0),
     [adjustedItems]
   );
+  const selectedTotalPrice = useMemo(
+    () => adjustedItems.filter(isItemSelected).reduce((sum, item) => sum + effectiveYen(item.product, item.size) * item.quantity, 0),
+    [adjustedItems, isItemSelected]
+  );
 
   const getSpaceUsed = useCallback(() => {
     let small = 0;
     let large = 0;
-    items.forEach(item => {
+    selectedItems.forEach(item => {
       if (item.size === 'small') small += item.quantity;
       else large += item.quantity;
     });
     return { small, large, totalSmallEquivalent: small + large * 2 };
-  }, [items]);
+  }, [selectedItems]);
 
   return (
     <CartContext.Provider value={{
@@ -228,6 +351,12 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       removeFromCart,
       updateQuantity,
       clearCart,
+      selectedItems,
+      selectedTotalPrice,
+      isItemSelected,
+      toggleItemSelected,
+      setAllItemsSelected,
+      removePurchasedItems,
       totalItems,
       totalPrice,
       getSpaceUsed

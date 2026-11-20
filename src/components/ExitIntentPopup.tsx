@@ -13,9 +13,12 @@ import { isLocalOrder, shipAllFromJapan, splitCart } from '@/utils/localStock';
 import { effectiveYen } from '@/utils/pricing';
 import type { CartItem } from '@/types';
 import { overlayHistory } from '@/lib/overlayHistory';
+import RecoveryCountdown from '@/components/cart/RecoveryCountdown';
+import { recoveryCouponState } from '@/utils/recoveryCouponState';
 
 const MARKETING_KEY = 'exit_popup_shown';      // oferta/guia/retenção simples — 1× por sessão
 const WARN_KEY = 'exit_waiver_warn_shown';     // aviso de perda da isenção — 1× por sessão
+const RECOVERY_KEY = 'exit_recovery_shown';    // aviso do cupom de recuperação — 1× por sessão
 const GUIDE_COOLDOWN_KEY = 'exit_intent_shown_at';
 const GUIDE_COOLDOWN_DAYS = 14;
 const MIN_TIME_ON_PAGE_MS = 6000;
@@ -30,7 +33,7 @@ const inFunnel = (p: string): boolean => p.startsWith('/checkout') || p.startsWi
 // justamente o e-mail que ele está digitando no formulário atrás dele.
 const AUTH_ROUTES = ['/login', '/cadastro'];
 
-type Variant = 'retention' | 'waiver_warning' | 'ps_offer' | 'guide';
+type Variant = 'retention' | 'waiver_warning' | 'ps_offer' | 'guide' | 'recovery';
 
 const flagGet = (k: string): boolean => {
   try { return sessionStorage.getItem(k) === '1'; } catch { return false; }
@@ -94,7 +97,7 @@ const Shell: React.FC<{ label: string; onClose: () => void; children: React.Reac
  */
 const ExitIntentPopup: React.FC = () => {
   const { isAuthenticated } = useUser();
-  const { items } = useCart();
+  const { selectedItems: items } = useCart();
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -124,6 +127,9 @@ const ExitIntentPopup: React.FC = () => {
     const list = itemsRef.current;
     const path = pathRef.current;
     if (AUTH_ROUTES.some((rota) => path.startsWith(rota))) return null;
+    // Cupom de recuperação aberto pelo e-mail e ainda na janela de 24 h: avisa que vale só para esta
+    // compra antes de o cliente sair. Vem antes dos demais popups: é o que ele tem a perder agora.
+    if (authRef.current && list.length > 0 && recoveryCouponState.get()) return 'recovery';
     // Pedido enviado do país do cliente: sem taxa PS, isenção nem oferta; nenhum popup de saída.
     if (list.length > 0 && isLocalOrder(list, safeStorage.getItem('sakura_selected_country') || 'Brasil')) return null;
     // Dentro do funil de checkout (cliente já está finalizando).
@@ -158,7 +164,10 @@ const ExitIntentPopup: React.FC = () => {
     // No checkout com isenção ativa, o lembrete vira AVISO de perda da isenção.
     if (v === 'retention' && psFeeWaiver.isActive()) v = 'waiver_warning';
 
-    if (v === 'waiver_warning') {
+    if (v === 'recovery') {
+      if (flagGet(RECOVERY_KEY)) return;         // aviso do cupom 1× por sessão (chave própria)
+      flagSet(RECOVERY_KEY);
+    } else if (v === 'waiver_warning') {
       if (flagGet(WARN_KEY)) return;             // aviso 1× por sessão (chave própria)
       flagSet(WARN_KEY);
     } else {
@@ -278,6 +287,36 @@ const ExitIntentPopup: React.FC = () => {
 
   const psFeeQty = psFeeQtyOf(items);
   const psFeeYen = psFeeQty * 1000;
+
+  // ----- Cupom de recuperação: vale só para esta compra, com contagem regressiva -----
+  if (variant === 'recovery') {
+    const rec = recoveryCouponState.get();
+    if (!rec) return null; // a janela fechou com o popup montado
+    return (
+      <Shell label="Seu cupom está ativo" onClose={close}>
+        <div className="bg-gradient-to-br from-amber-500 to-pink-600 p-6 text-center text-white">
+          <Gift className="w-10 h-10 mx-auto mb-2" />
+          <h2 className="text-xl font-black leading-tight">Seu cupom de {rec.discountPercent}% está ativo</h2>
+          <p className="text-sm text-white/90 mt-1">
+            Ele vale <strong>apenas para esta compra</strong>, uma vez só.
+          </p>
+        </div>
+        <div className="p-6 space-y-3 text-center">
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            Cupom <span className="font-mono font-bold">{rec.code}</span>. Se sair sem comprar, ele continua valendo até o contador chegar a zero:
+          </p>
+          <RecoveryCountdown endsAt={rec.endsAt} onExpire={close} className="block font-mono text-3xl font-black tabular-nums text-pink-600" />
+          <button
+            onClick={() => { close(); navigate('/carrinho'); }}
+            className="w-full bg-gradient-to-r from-pink-600 to-fuchsia-600 text-white font-bold py-3 rounded-xl hover:opacity-90 transition-opacity"
+          >
+            Ver meu carrinho
+          </button>
+          <button onClick={close} className="w-full text-sm text-gray-500 py-1 hover:underline">Continuar navegando</button>
+        </div>
+      </Shell>
+    );
+  }
 
   // ----- Ponto 1: retenção no checkout -----
   if (variant === 'retention') {

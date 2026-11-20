@@ -62,19 +62,19 @@ describe('código e link do cupom de recuperação', () => {
   });
 });
 
-describe('janela: só depois de abrir o link, só por 2 horas', () => {
+describe('janela: só depois de abrir o link, só por 24 horas', () => {
   it('estados da janela', () => {
     expect(recoveryWindowState(coupon(), NOW)).toBe('not_opened');
-    expect(recoveryWindowState(coupon({ openedAt: NOW, windowEndsAt: NOW + 2 * HOUR }), NOW + HOUR)).toBe('open');
-    expect(recoveryWindowState(coupon({ openedAt: NOW, windowEndsAt: NOW + 2 * HOUR }), NOW + 2 * HOUR + 1)).toBe('closed');
-    expect(recoveryWindowState(coupon({ openedAt: NOW, windowEndsAt: NOW + 2 * HOUR, invalidatedAt: NOW }), NOW + 1)).toBe('closed');
+    expect(recoveryWindowState(coupon({ openedAt: NOW, windowEndsAt: NOW + 24 * HOUR }), NOW + HOUR)).toBe('open');
+    expect(recoveryWindowState(coupon({ openedAt: NOW, windowEndsAt: NOW + 24 * HOUR }), NOW + 24 * HOUR + 1)).toBe('closed');
+    expect(recoveryWindowState(coupon({ openedAt: NOW, windowEndsAt: NOW + 24 * HOUR, invalidatedAt: NOW }), NOW + 1)).toBe('closed');
   });
 
   it('digitar o código sem ter aberto o link é recusado; dentro da janela passa; depois dela, não', () => {
     expect(() => assertRecoveryCouponUsable(coupon(), 'uid1', NOW)).toThrow(expect.objectContaining({ code: 'recovery_link_required', statusCode: 409 }));
-    const aberto = coupon({ openedAt: NOW, windowEndsAt: NOW + 2 * HOUR });
-    expect(() => assertRecoveryCouponUsable(aberto, 'uid1', NOW + HOUR)).not.toThrow();
-    expect(() => assertRecoveryCouponUsable(aberto, 'uid1', NOW + 3 * HOUR)).toThrow(expect.objectContaining({ code: 'recovery_window_closed' }));
+    const aberto = coupon({ openedAt: NOW, windowEndsAt: NOW + 24 * HOUR });
+    expect(() => assertRecoveryCouponUsable(aberto, 'uid1', NOW + 23 * HOUR)).not.toThrow();
+    expect(() => assertRecoveryCouponUsable(aberto, 'uid1', NOW + 25 * HOUR)).toThrow(expect.objectContaining({ code: 'recovery_window_closed' }));
     // Outra conta, mesmo com a janela aberta.
     expect(() => assertRecoveryCouponUsable(aberto, 'uid-outro', NOW + HOUR)).toThrow(expect.objectContaining({ code: 'coupon_not_eligible' }));
   });
@@ -85,23 +85,41 @@ describe('janela: só depois de abrir o link, só por 2 horas', () => {
 });
 
 describe('abrir o link do e-mail', () => {
-  it('começa a janela de 2 h e devolve o cupom; recarregar dentro da janela não queima nada', async () => {
+  it('começa a janela de 24 h e devolve o cupom; recarregar dentro da janela não queima nada', async () => {
     const db = new FakeDb({ [`coupons/${code()}`]: coupon() });
     const first = await open(db);
-    expect(first.windowEndsAt).toBe(NOW + 2 * HOUR);
+    expect(first.windowEndsAt).toBe(NOW + 24 * HOUR);
     expect(first.replay).toBe(false);
-    expect(db.docs[`coupons/${code()}`]).toMatchObject({ openedAt: NOW, windowEndsAt: NOW + 2 * HOUR, openedByUid: 'uid1' });
+    expect(db.docs[`coupons/${code()}`]).toMatchObject({ openedAt: NOW, windowEndsAt: NOW + 24 * HOUR, openedByUid: 'uid1' });
 
     const again = await open(db, user(), NOW + 30 * 60 * 1000);
     expect(again.replay).toBe(true);
-    expect(again.windowEndsAt).toBe(NOW + 2 * HOUR); // a janela não anda
+    expect(again.windowEndsAt).toBe(NOW + 24 * HOUR); // a janela não anda
+  });
+
+  // `expiryDate` é conferida ao CRIAR o pedido. Quem abre o link perto do fim do prazo do e-mail
+  // (ex.: faltando 2 h) ainda precisa das 24 h inteiras para finalizar.
+  it('abrir o link perto do fim do prazo do e-mail estende a validade até o fim da janela', async () => {
+    const perto = coupon({ expiryDate: new Date(NOW + 2 * HOUR).toISOString() });
+    const db = new FakeDb({ [`coupons/${code()}`]: perto });
+    const aberto = await open(db);
+
+    expect(aberto.windowEndsAt).toBe(NOW + 24 * HOUR);
+    expect(db.docs[`coupons/${code()}`].expiryDate).toBe(new Date(NOW + 24 * HOUR).toISOString());
+    expect(aberto.coupon.expiryDate).toBe(new Date(NOW + 24 * HOUR).toISOString());
+  });
+
+  it('com sobra de prazo, a validade original é mantida', async () => {
+    const db = new FakeDb({ [`coupons/${code()}`]: coupon() }); // vence em 48 h
+    await open(db);
+    expect(db.docs[`coupons/${code()}`].expiryDate).toBe(new Date(NOW + 48 * HOUR).toISOString());
   });
 
   it('saiu sem comprar e voltou depois da janela: o cupom morre e o link não abre de novo', async () => {
     const db = new FakeDb({ [`coupons/${code()}`]: coupon() });
     await open(db);
-    await expect(open(db, user(), NOW + 3 * HOUR)).rejects.toMatchObject({ code: 'recovery_window_closed', statusCode: 409 });
-    expect(db.docs[`coupons/${code()}`].invalidatedAt).toBe(NOW + 3 * HOUR);
+    await expect(open(db, user(), NOW + 25 * HOUR)).rejects.toMatchObject({ code: 'recovery_window_closed', statusCode: 409 });
+    expect(db.docs[`coupons/${code()}`].invalidatedAt).toBe(NOW + 25 * HOUR);
     // Mesmo "voltando no tempo", continua invalidado.
     await expect(open(db, user(), NOW + 1)).rejects.toMatchObject({ code: 'recovery_window_closed' });
   });

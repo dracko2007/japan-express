@@ -40,7 +40,8 @@ const devError = isDev ? console.error.bind(console) : () => {};
 
 
 const Checkout: React.FC = () => {
-  const { items, totalPrice } = useCart();
+  // Só o que está marcado no carrinho vai para o pedido.
+  const { selectedItems: items, selectedTotalPrice: totalPrice } = useCart();
   const hasTrackedBeginCheckout = useRef(false);
 
   // Dispara begin_checkout (GA4 + Meta Pixel) uma única vez ao montar a página,
@@ -114,13 +115,12 @@ const Checkout: React.FC = () => {
   const baseTotalPrice = items.reduce(
     (sum, item) => item.freeGift ? sum : sum + unitDisplayOf(item) * item.quantity, 0
   );
-  // Cupons de afiliado não podem empilhar com desconto do produto/site.
+  // Nenhum cupom empilha com desconto do produto/site (mesma regra do servidor, shared/money.js).
   // Em carrinho misto, a base inclui somente itens elegíveis.
   const regularSubtotalForCoupon = items.reduce(
     (sum, item) => {
       const hasProductDiscount = !isLocalItem(item) && (item.product.discountPercent || 0) > 0;
-      const affiliateCoupon = Boolean(appliedCoupon?.affiliateCode);
-      return (!item.freeGift && !item.product.id.endsWith('_promo') && (!affiliateCoupon || !hasProductDiscount))
+      return (!item.freeGift && !item.product.id.endsWith('_promo') && !hasProductDiscount)
         ? sum + unitDisplayOf(item) * item.quantity
         : sum;
     }, 0

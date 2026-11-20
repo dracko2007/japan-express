@@ -390,6 +390,18 @@ try {
   await fails(getDoc(doc(otherDb, 'wishlists', 'u1')), 'other user cannot read wishlist');
   await fails(setDoc(doc(otherDb, 'wishlists', 'u1'), { items: [], updatedAt: serverTimestamp() }), 'other user cannot overwrite wishlist');
   await fails(getDoc(doc(anonymousDb, 'wishlists', 'u1')), 'anonymous cannot read wishlist');
+
+  // Carrinho da conta: só o dono lê e grava, só os 3 campos, até 60 linhas, hora do servidor.
+  const linhaCarrinho = { productId: 'p1', size: 'small', quantity: 2 };
+  await succeeds(setDoc(doc(userDb, 'carts', 'u1'), { items: [linhaCarrinho], unselected: ['p1|small'], updatedAt: serverTimestamp() }), 'owner saves cart');
+  await succeeds(getDoc(doc(userDb, 'carts', 'u1')), 'owner reads cart');
+  await fails(getDoc(doc(otherDb, 'carts', 'u1')), 'other user cannot read cart');
+  await fails(setDoc(doc(otherDb, 'carts', 'u1'), { items: [], unselected: [], updatedAt: serverTimestamp() }), 'other user cannot overwrite cart');
+  await fails(getDoc(doc(anonymousDb, 'carts', 'u1')), 'anonymous cannot read cart');
+  await fails(setDoc(doc(anonymousDb, 'carts', 'u1'), { items: [], unselected: [], updatedAt: serverTimestamp() }), 'anonymous cannot write cart');
+  await fails(setDoc(doc(userDb, 'carts', 'u1'), { items: [], unselected: [], updatedAt: serverTimestamp(), total: 1 }), 'cart rejects extra fields');
+  await fails(setDoc(doc(userDb, 'carts', 'u1'), { items: Array.from({ length: 61 }, () => linhaCarrinho), unselected: [], updatedAt: serverTimestamp() }), 'cart rejects more than 60 lines');
+  await fails(setDoc(doc(userDb, 'carts', 'u1'), { items: [], unselected: [], updatedAt: new Date() }), 'cart requires server timestamp');
   await fails(setDoc(doc(userDb, 'wishlists', 'u1'), { items: [], updatedAt: serverTimestamp(), points: 999 }), 'wishlist rejects extra fields');
   await fails(setDoc(doc(userDb, 'wishlists', 'u1'), { items: Array.from({ length: 201 }, () => favorito), updatedAt: serverTimestamp() }), 'wishlist capped at 200 items');
   await fails(setDoc(doc(userDb, 'wishlists', 'u1'), { items: [], updatedAt: new Date('2020-01-01') }), 'wishlist requires server timestamp');

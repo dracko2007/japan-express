@@ -6,6 +6,7 @@ import {
   assertExactKeys,
   handleCors,
   HttpError,
+  normalizeEmail,
   parseJsonObject,
   requiredText,
   sendError,
@@ -464,6 +465,51 @@ async function handleCustomerVerification(req, res) {
   }
 }
 
+// ── admin-customer-delete.js ────────────────────────────────────────
+// Excluir cliente no painel só apagava o perfil no Firestore: o login continuava no
+// Firebase Auth. Resultado: o e-mail ficava "já cadastrado" (não dava para recadastrar)
+// e também não entrava (sem perfil). Aqui o servidor apaga o login. Só ele pode: o SDK
+// do navegador não apaga a conta de outra pessoa.
+async function handleCustomerDelete(req, res) {
+  if (!handleCors(req, res, { methods: ['POST'] })) return;
+  try {
+    const adminUser = await requireAdmin(req);
+    await enforceRateLimit(req, {
+      scope: 'admin-customer-delete:POST',
+      limit: 60,
+      windowMs: 60 * 60 * 1000,
+      identity: adminUser.uid,
+    });
+    const body = parseJsonObject(req.body);
+    assertExactKeys(body, ['email']);
+    const email = normalizeEmail(body.email);
+    if (!email) throw new HttpError(400, 'invalid_request');
+    if (email === superAdminEmail().toLowerCase()) throw new HttpError(403, 'cannot_delete_super_admin');
+
+    let record;
+    try {
+      record = await adminAuth().getUserByEmail(email);
+    } catch (error) {
+      // Sem login para esse e-mail: nada a apagar (a exclusão do perfil continua valendo).
+      if (error?.code === 'auth/user-not-found') {
+        res.status(200).json({ ok: true, deleted: false });
+        return;
+      }
+      throw error;
+    }
+    // Esta rota é de CLIENTE: conta de administrador sai só pelo gerenciador de admins.
+    if (record.uid === adminUser.uid) throw new HttpError(403, 'cannot_delete_self');
+    if (record.uid.startsWith('admin_') || record.customClaims?.admin) throw new HttpError(403, 'cannot_delete_admin');
+
+    await adminAuth().revokeRefreshTokens(record.uid).catch(() => undefined);
+    await adminAuth().deleteUser(record.uid);
+    res.status(200).json({ ok: true, deleted: true });
+  } catch (error) {
+    console.error('[admin-customer-delete]', error instanceof Error ? error.message : error);
+    sendError(res, error);
+  }
+}
+
 // ── dispatcher ──────────────────────────────────────────────────────
 export default async function handler(req, res) {
   const { action } = req.query;
@@ -472,7 +518,8 @@ export default async function handler(req, res) {
   if (action === 'session') return handleSession(req, res);
   if (action === 'users') return handleUsers(req, res);
   if (action === 'customers-verification') return handleCustomerVerification(req, res);
+  if (action === 'customer-delete') return handleCustomerDelete(req, res);
   return res.status(400).json({ error: 'invalid_action' });
 }
 
-export { handleDashboard, handleCouponUsage, handleSession, handleUsers, handleCustomerVerification };
+export { handleDashboard, handleCouponUsage, handleSession, handleUsers, handleCustomerVerification, handleCustomerDelete };

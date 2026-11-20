@@ -16,7 +16,7 @@ const POLL_MS = 15_000;
 
 /**
  * E-mail "seu carrinho ainda está esperando" (`/carrinho?rec=<código>.<chave>`).
- * Abrir o link começa a janela do cupom (2 h) e o desconto entra sozinho; sem login, leva ao login e
+ * Abrir o link começa a janela do cupom (24 h) e o desconto entra sozinho; sem login, leva ao login e
  * volta para este mesmo link. Digitar o código à mão não ativa o cupom (`api/_lib/recovery-coupon.js`).
  */
 export function useRecoveryLink({ authReady, isAuthenticated, onOpened, onError, onExpired }: Options) {

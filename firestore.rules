@@ -178,6 +178,19 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
     }
 
+    // Carrinho da conta: um doc por conta, só o dono lê e grava. O teto de 60 linhas acompanha MAX_LINES
+    // do cartSyncService. Guarda só produto, tamanho e quantidade: preço e dados vêm do catálogo.
+    match /carts/{userId} {
+      allow read, delete: if isAdmin() || owns(userId);
+      allow create, update: if owns(userId)
+        && request.resource.data.keys().hasOnly(['items', 'unselected', 'updatedAt'])
+        && request.resource.data.items is list
+        && request.resource.data.items.size() <= 60
+        && request.resource.data.unselected is list
+        && request.resource.data.unselected.size() <= 60
+        && request.resource.data.updatedAt == request.time;
+    }
+
     match /orders/{orderId} {
       allow read: if isAdmin()
         || (signedIn() && resource.data.get('userId', '') == request.auth.uid)

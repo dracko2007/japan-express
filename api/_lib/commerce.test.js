@@ -112,6 +112,62 @@ describe('authoritative checkout quote', () => {
     expect(result.couponDiscountYen).toBe(100);
   });
 
+  // Desconto não acumula: produto que já tem desconto da loja não recebe cupom nenhum.
+  // Antes só o cupom de afiliado respeitava isso; boas-vindas, recuperação, global e
+  // pessoal davam desconto em cima do preço já reduzido.
+  describe('cupom em produto com desconto da loja', () => {
+    const comDesconto = { ...product, id: 'p2', name: 'Em promoção', discountPercent: 20 }; // ¥1000 -> ¥800
+    const produtos = new Map([['p1', product], ['p2', comDesconto]]);
+    const soDesconto = [{ productId: 'p2', variantId: 'small', quantity: 1 }];
+    const misto = [
+      { productId: 'p1', variantId: 'small', quantity: 1 },
+      { productId: 'p2', variantId: 'small', quantity: 1 },
+    ];
+    const cupons = {
+      'boas-vindas / global (percentual em discount)': { code: 'BEMVINDO10', discountType: 'percentage', discount: 10 },
+      'recuperação de carrinho (percentual em discountPercent)': { code: 'CARRINHOBACK10-AB12', type: 'percent', discountType: 'percentage', discount: 0, discountPercent: 10 },
+      'afiliado': { code: 'ANA10', affiliateCode: 'ANA10', discountType: 'percentage', discount: 10 },
+    };
+
+    for (const [nome, coupon] of Object.entries(cupons)) {
+      it(`${nome}: não dá desconto quando todos os itens já têm desconto`, () => {
+        const result = quote({ requestedItems: soDesconto, products: produtos, coupon });
+        expect(result.items[0].unitYen).toBe(800);
+        expect(result.couponDiscountYen).toBe(0);
+        expect(result.display.couponDiscount).toBe(0);
+        expect(result.netProductsYen).toBe(800);
+      });
+
+      it(`${nome}: no carrinho misto incide só no item sem desconto`, () => {
+        const result = quote({ requestedItems: misto, products: produtos, coupon });
+        expect(result.productSubtotalYen).toBe(1800);
+        expect(result.couponDiscountYen).toBe(100); // 10% de ¥1000, não de ¥1800
+        expect(result.netProductsYen).toBe(1700);
+        expect(result.display.couponDiscount).toBeGreaterThan(0);
+      });
+    }
+
+    it('cupom de valor fixo (em ¥) também só abate o item sem desconto', () => {
+      const fixo = { code: 'FIXO500', discountType: 'fixed', discount: 500 };
+      expect(quote({ requestedItems: soDesconto, products: produtos, coupon: fixo }).couponDiscountYen).toBe(0);
+      // base elegível = ¥1000, então ¥500 cabe inteiro
+      expect(quote({ requestedItems: misto, products: produtos, coupon: fixo }).couponDiscountYen).toBe(500);
+      // e nunca passa da base elegível: cupom de ¥1500 só leva os ¥1000 do item sem desconto
+      const grande = { code: 'FIXO1500', discountType: 'fixed', discount: 1500 };
+      expect(quote({ requestedItems: misto, products: produtos, coupon: grande }).couponDiscountYen).toBe(1000);
+    });
+
+    it('produto sem desconto continua recebendo o cupom normalmente', () => {
+      const result = quote({ coupon: { code: 'GLOBAL10', discountType: 'percentage', discount: 10 } });
+      expect(result.couponDiscountYen).toBe(100);
+    });
+
+    it('cupom de frete grátis não é afetado (não dá desconto em produto)', () => {
+      const result = quote({ requestedItems: soDesconto, products: produtos, coupon: { code: 'FRETE', freeShipping: true } });
+      expect(result.couponDiscountYen).toBe(0);
+    });
+  });
+
   // Regressão do CRÍTICO #3: `remaining` era calculado e descartado. O limite
   // de unidades só era conferido no fulfillment — depois de cobrar o cartão,
   // deixando o pedido preso em `payment_review`.
