@@ -50,7 +50,7 @@ export async function main(argv, deps = {}) {
   try {
     response = await doFetch(`${base}/api/admin?action=cli`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      headers: { 'Content-Type': 'application/json', ...(key === 'proxy-injected' ? {} : { Authorization: `Bearer ${key}` }) }, // 'proxy-injected': um proxy de saída coloca a chave
       body: JSON.stringify(body),
       redirect: 'manual', // o fetch descarta o Authorization ao trocar de host: melhor falhar claro
       signal: AbortSignal.timeout(TIMEOUT_MS),

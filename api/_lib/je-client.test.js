@@ -78,6 +78,11 @@ describe('je main', () => {
     expect([...r.out, ...r.err].join('\n')).not.toContain(KEY);
   });
 
+  it('com JE_API_KEY=proxy-injected não envia Authorization (o proxy injeta)', async () => {
+    const r = await run(['health'], { env: { JE_API_KEY: 'proxy-injected' } });
+    expect(r.fetch.mock.calls[0][1].headers.Authorization).toBeUndefined();
+  });
+
   it('erro do servidor: saída 1 e a chave não vaza', async () => {
     const r = await run(['health'], { response: { ok: false, status: 401, json: async () => ({ error: 'unauthorized' }) } });
     expect(r.code).toBe(1);
