@@ -99,11 +99,13 @@ export function couponTerms(coupon) {
   };
 }
 
-/** Linha entra na base do cupom? Promoção da home e brinde nunca; afiliado não empilha com desconto do produto. */
-function couponEligible(line, terms) {
-  if (line.freeGift || line.homePromo) return false;
-  if (terms?.affiliate && line.productDiscounted) return false;
-  return true;
+/**
+ * Linha entra na base do cupom? Brinde, promoção da home e produto que já tem desconto da loja
+ * nunca: desconto não acumula, seja qual for o cupom (afiliado, boas-vindas, recuperação de
+ * carrinho, global, pessoal; percentual ou fixo). Antes só o cupom de afiliado respeitava isso.
+ */
+function couponEligible(line) {
+  return !(line.freeGift || line.homePromo || line.productDiscounted);
 }
 
 /**
@@ -134,7 +136,7 @@ export function productBenefits({ lines, coupon = null, redeemPoints = 0 }) {
     const quantity = Number(line.quantity) || 0;
     const lineYen = line.freeGift ? 0 : (Number(line.unitYen) || 0) * quantity;
     productSubtotalYen += lineYen;
-    if (couponEligible(line, terms)) regularSubtotalYen += lineYen;
+    if (couponEligible(line)) regularSubtotalYen += lineYen;
     if (!line.freeGift && !line.noPsFee) psFeeYen += quantity * PS_FEE_PER_UNIT_YEN;
   }
   let couponDiscountYen = 0;
@@ -233,7 +235,7 @@ export function displayTotals({
   lines.forEach((line, index) => {
     const lineTotal = units[index] * (Number(line.quantity) || 0);
     subtotal += lineTotal;
-    if (couponEligible(line, benefits.terms)) regularSubtotal += lineTotal;
+    if (couponEligible(line)) regularSubtotal += lineTotal;
   });
 
   const terms = benefits.terms;

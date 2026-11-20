@@ -214,7 +214,7 @@ const CheckoutOrderSummary: React.FC<CheckoutOrderSummaryProps> = ({
             <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
               <p className="font-bold">🏷️ Produto(s) com desconto promocional</p>
               <p className="mt-0.5">
-                {discountedItemCount} item(ns) já tem desconto da loja. O cupom de afiliado só será aplicado aos produtos fora da promoção; não há acúmulo de descontos.
+                {discountedItemCount} item(ns) já tem desconto da loja. Nenhum cupom vale nesses itens: o cupom só é aplicado aos produtos fora da promoção, e descontos não se acumulam.
               </p>
             </div>
           )}

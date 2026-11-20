@@ -114,13 +114,12 @@ const Checkout: React.FC = () => {
   const baseTotalPrice = items.reduce(
     (sum, item) => item.freeGift ? sum : sum + unitDisplayOf(item) * item.quantity, 0
   );
-  // Cupons de afiliado não podem empilhar com desconto do produto/site.
+  // Nenhum cupom empilha com desconto do produto/site (mesma regra do servidor, shared/money.js).
   // Em carrinho misto, a base inclui somente itens elegíveis.
   const regularSubtotalForCoupon = items.reduce(
     (sum, item) => {
       const hasProductDiscount = !isLocalItem(item) && (item.product.discountPercent || 0) > 0;
-      const affiliateCoupon = Boolean(appliedCoupon?.affiliateCode);
-      return (!item.freeGift && !item.product.id.endsWith('_promo') && (!affiliateCoupon || !hasProductDiscount))
+      return (!item.freeGift && !item.product.id.endsWith('_promo') && !hasProductDiscount)
         ? sum + unitDisplayOf(item) * item.quantity
         : sum;
     }, 0

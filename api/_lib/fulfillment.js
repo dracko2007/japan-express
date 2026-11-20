@@ -26,8 +26,10 @@ function eventId(provider, reference) {
  */
 function extractDiscountPercent(order) {
   const items = Array.isArray(order.items) ? order.items : [];
+  // Mesma base do cupom (shared/money.js): sem brinde, sem promoção da home e sem produto com desconto
+  // da loja. Item de estoque local tem preço fixo e nunca conta como "com desconto".
   const regularSubtotal = items
-    .filter((item) => !item.homePromo && !item.freeGift)
+    .filter((item) => !item.homePromo && !item.freeGift && (item.local === true || !(Number(item.productDiscountPercent) > 0)))
     .reduce((sum, item) => sum + Number(item.unitYen || 0) * Number(item.quantity || 0), 0);
 
   if (Number.isFinite(regularSubtotal) && regularSubtotal > 0 && Number.isFinite(order.couponDiscountYen)) {

@@ -290,15 +290,14 @@ const Cart: React.FC = () => {
   const promoSubtotal = items.reduce(
     (sum, item) => (!item.freeGift && isPromoItem(item)) ? sum + unitOf(item) * item.quantity : sum, 0
   );
-  const affiliateCoupon = Boolean(activeCoupon?.affiliateCode);
+  // Cupom nenhum acumula com desconto da loja: a base só tem itens sem promoção e sem desconto.
+  const couponWithProductDiscount = Boolean(activeCoupon && !activeCoupon.freeShipping);
   const regularSubtotal = items.reduce(
-    (sum, item) => {
-      const hasPageDiscount = pageDiscounted(item);
-      return (!item.freeGift && !isPromoItem(item) && (!affiliateCoupon || !hasPageDiscount))
-        ? sum + unitOf(item) * item.quantity
-        : sum;
-    }, 0
+    (sum, item) => (!item.freeGift && !isPromoItem(item) && !pageDiscounted(item))
+      ? sum + unitOf(item) * item.quantity
+      : sum, 0
   );
+  const hasCouponExcludedItems = items.some((item) => !item.freeGift && (isPromoItem(item) || pageDiscounted(item)));
   const baseTotalPrice = promoSubtotal + regularSubtotal;
   const hasPromoItems = promoSubtotal > 0;
   const baseDoCupom = promoProductId
@@ -310,9 +309,6 @@ const Cart: React.FC = () => {
   const discountedItemCount = items.filter((item) =>
     !item.freeGift && (isPromoItem(item) || (item.product.discountPercent || 0) > 0)
   ).length;
-  const affiliateDiscountedItemCount = affiliateCoupon
-    ? items.filter((item) => !item.freeGift && !isPromoItem(item) && (item.product.discountPercent || 0) > 0).length
-    : 0;
   const discountAmount = activeCoupon ? computeDiscount(activeCoupon, baseDoCupom) : 0;
 
   // Resgate de pontos: 1 ponto = ¥1, limitado ao valor dos produtos (em ¥)
@@ -459,11 +455,11 @@ const Cart: React.FC = () => {
                     </Button>
                   </div>
                 </div>
-                {affiliateCoupon && discountedItemCount > 0 && (
+                {couponWithProductDiscount && discountedItemCount > 0 && (
                   <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
                     <p className="font-bold">🏷️ Produto(s) com desconto promocional</p>
                     <p className="mt-0.5">
-                      {discountedItemCount} item(ns) já está(ão) com desconto da loja. O cupom de afiliado só é aplicado nos produtos fora da promoção; descontos não são acumulados.
+                      {discountedItemCount} item(ns) já está(ão) com desconto da loja. O cupom só é aplicado nos produtos fora da promoção; descontos não são acumulados.
                     </p>
                   </div>
                 )}
@@ -476,7 +472,7 @@ const Cart: React.FC = () => {
                   const itemSubtotal = item.freeGift || itemIsPromo ? 0
                     : fxConvert(effectiveYen(item.product, item.size), currency) * item.quantity;
                   const itemDiscount = (!itemIsPromo && activeCoupon && regularSubtotal > 0
-                    && (!activeCoupon.affiliateCode || !(item.product.discountPercent || 0)))
+                    && !pageDiscounted(item))
                     ? discountAmount * (itemSubtotal / regularSubtotal)
                     : 0;
                   return (
@@ -660,14 +656,14 @@ const Cart: React.FC = () => {
                             🎁 {promoBreakdown}
                           </p>
                         )}
-                        {affiliateCoupon && hasPromoItems && regularSubtotal === 0 && (
+                        {couponWithProductDiscount && hasCouponExcludedItems && regularSubtotal === 0 && (
                           <p className="text-[11px] text-pink-600 font-semibold bg-pink-50 border border-pink-200 rounded-lg px-2 py-1.5 leading-snug">
-                            ⚠️ Todos os itens já têm desconto promocional. O cupom não foi aplicado.
+                            ⚠️ Todos os itens já têm desconto da loja. O cupom não foi aplicado.
                           </p>
                         )}
-                        {affiliateCoupon && hasPromoItems && regularSubtotal > 0 && (
+                        {couponWithProductDiscount && hasCouponExcludedItems && regularSubtotal > 0 && (
                           <p className="text-[11px] text-blue-600 font-medium bg-blue-50 border border-blue-200 rounded-lg px-2 py-1.5 leading-snug">
-                            ℹ️ Cupom aplicado apenas aos itens sem promoção ({formatPrice(regularSubtotal, currency, localCart.anyLocal)}). Itens com preço promocional não acumulam desconto.
+                            ℹ️ Cupom aplicado apenas aos itens sem desconto da loja ({formatPrice(regularSubtotal, currency, localCart.anyLocal)}). Itens com preço promocional não acumulam desconto.
                           </p>
                         )}
                       </div>
