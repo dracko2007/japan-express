@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Pencil, Trash2, X, Image as ImageIcon, Loader2, PackageOpen, Sparkles, GripVertical, Save, Gift, Infinity as InfinityIcon, Search, Star } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Loader2, PackageOpen, Sparkles, Save, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSearchParams } from 'react-router-dom';
 import { FEATURES } from '@/config/features';
@@ -9,118 +9,28 @@ import { getVariants, roundYen } from '@/utils/pricing';
 import { generateUniqueSku } from '@/utils/sku';
 import { useLanguage } from '@/context/LanguageContext';
 
-const VARIANT_PRESETS = ['Pequeno', 'Médio', 'Grande', 'Kit'];
-// Opções de venda por unidade — ex: "1 unidade", "2 unidades"
-const UNIT_PRESETS = ['1 unidade', '2 unidades', '3 unidades', '4 unidades', '5 unidades', '6 unidades', '10 unidades'];
-const ALL_PRESETS = [...VARIANT_PRESETS, ...UNIT_PRESETS];
-const MAX_PHOTOS = 9; // capa + até 8 fotos extras
-const MAX_VIDEO_MB = 50; // limite de upload de vídeo do produto
 import { useProducts } from '@/context/ProductsContext';
 import { productService } from '@/services/productService';
 import { cloudinaryService } from '@/services/cloudinaryService';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/UserContext';
-import { PACKAGE_SAFETY_MARGIN_CM, sanitizePackageDimensions } from '@/utils/shippingDimensions';
-import { convertYen as fxConvertYen } from '@/services/fxService';
-import { formatPrice } from '@/utils/currency';
+import { sanitizePackageDimensions } from '@/utils/shippingDimensions';
 
 import { categoryService, DEFAULT_CATEGORIES, type ProductCategory } from '@/services/categoryService';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { authenticatedFetch } from '@/services/authenticatedFetch';
 import { errorMessage } from '@/utils/errorMessage';
-import { LocalStockFields } from '@/components/admin/LocalStockFields';
-
-const slugify = (s: string) =>
-  s
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '')
-    .slice(0, 40) || `produto-${Date.now()}`;
-
-// Redimensiona e converte para WebP — muito mais leve que JPEG para o mesmo tamanho.
-// 2560px/q0.95: o dobro do maior render do site (carrossel, 1400px), o que cobre
-// telas retina. Acima disso paga-se banda por pixel que nenhuma tela mostra.
-// NUNCA faz upscale — uma origem de 600px continua com 600px, e é por isso que
-// a resolução do arquivo de origem é o teto real da qualidade final.
-function fileToCompressedDataURL(file: File, maxSize = 2560, quality = 0.95): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > height && width > maxSize) {
-          height = Math.round((height * maxSize) / width);
-          width = maxSize;
-        } else if (height > maxSize) {
-          width = Math.round((width * maxSize) / height);
-          height = maxSize;
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return reject(new Error('canvas'));
-        ctx.drawImage(img, 0, 0, width, height);
-        // WebP é ~30% menor que JPEG com qualidade equivalente
-        const webp = canvas.toDataURL('image/webp', quality);
-        // Fallback para JPEG se o browser não suportar WebP (raro em 2025)
-        resolve(webp.startsWith('data:image/webp') ? webp : canvas.toDataURL('image/jpeg', quality));
-      };
-      img.onerror = reject;
-      img.src = e.target?.result as string;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-// Thumbnail em HD — 1600px cobre os cards de lista em telas retina.
-function fileToThumbnailDataURL(file: File): Promise<string> {
-  return fileToCompressedDataURL(file, 1600, 0.95);
-}
-
-// Baixa uma imagem por URL e converte para WebP comprimido via canvas.
-// Usada para imagens externas (Yahoo/Rakuten) que chegam em resolução full.
-// Atenção: se o fornecedor devolver a miniatura em vez da foto grande, o produto
-// nasce com master pequena e nenhuma transformação de entrega recupera detalhe.
-function urlToCompressedDataURL(url: string, maxSize = 2560, quality = 0.95): Promise<string> {
-  return new Promise((resolve) => {
-    // Timeout de 8s: se CORS ou rede travar, cai no fallback com a URL original
-    const timer = setTimeout(() => resolve(url), 8000);
-    const done = (result: string) => { clearTimeout(timer); resolve(result); };
-
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      let { width, height } = img;
-      if (width > height && width > maxSize) {
-        height = Math.round((height * maxSize) / width);
-        width = maxSize;
-      } else if (height > maxSize) {
-        width = Math.round((width * maxSize) / height);
-        height = maxSize;
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) { done(url); return; }
-      try {
-        ctx.drawImage(img, 0, 0, width, height);
-        const webp = canvas.toDataURL('image/webp', quality);
-        done(webp.startsWith('data:image/webp') ? webp : canvas.toDataURL('image/jpeg', quality));
-      } catch {
-        // Canvas tainted por CORS — devolve a URL original
-        done(url);
-      }
-    };
-    img.onerror = () => done(url);
-    img.src = url;
-  });
-}
+import { MAX_PHOTOS, MAX_VIDEO_MB } from '@/components/admin/productFormConstants';
+import { slugify, fileToCompressedDataURL, urlToCompressedDataURL } from '@/utils/productImages';
+import ProductVideoSection from '@/components/admin/product/ProductVideoSection';
+import ProductPhotosSection from '@/components/admin/product/ProductPhotosSection';
+import ProductDescriptionSection from '@/components/admin/product/ProductDescriptionSection';
+import ProductPartnerStockSection from '@/components/admin/product/ProductPartnerStockSection';
+import ProductStockSection from '@/components/admin/product/ProductStockSection';
+import ProductTagsSection from '@/components/admin/product/ProductTagsSection';
+import ProductHomeFeatureSection from '@/components/admin/product/ProductHomeFeatureSection';
+import ProductVariantsSection from '@/components/admin/product/ProductVariantsSection';
+import ProductListView from '@/components/admin/product/ProductListView';
 
 const emptyForm = (): Product => ({
   id: '',
@@ -704,81 +614,13 @@ const ProductManager: React.FC = () => {
         )}
       </div>
 
-      {/* Lista */}
-      {grouped.length === 0 && (
-        <div className="text-center py-16 text-muted-foreground">
-          <Search className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p className="font-medium">Nenhum produto encontrado</p>
-          <button onClick={() => { setSearchQuery(''); setFilterCat('all'); }} className="text-xs text-primary hover:underline mt-1">
-            Limpar filtros
-          </button>
-        </div>
-      )}
-      <div className="space-y-8">
-        {grouped.map((group) => (
-          <div key={group.id}>
-            <h3 className="text-sm font-bold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
-              <span className="text-lg">{group.icon}</span> {group.label}
-              <span className="text-xs font-normal">({group.items.length})</span>
-            </h3>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {group.items.map((p) => (
-                  <div key={p.id} className={`bg-card border rounded-xl overflow-hidden flex shadow-sm ${p.hidden ? 'border-dashed border-gray-300 opacity-70' : 'border-border'}`}>
-                    <div className="w-24 h-24 bg-secondary/40 flex-shrink-0 relative">
-                      {p.image ? (
-                        <img src={p.image} alt={p.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                          <ImageIcon className="w-6 h-6" />
-                        </div>
-                      )}
-                      {p.discountPercent ? (
-                        <span className="absolute top-0 left-0 bg-red-600 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-br">-{p.discountPercent}%</span>
-                      ) : null}
-                    </div>
-                    <div className="p-3 flex-1 min-w-0 flex flex-col">
-                      <p className="font-semibold text-sm leading-tight line-clamp-2 flex items-center gap-1 flex-wrap">
-                        {p.hidden && <span className="text-[9px] font-bold bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded shrink-0">OCULTO</span>}
-                        {p.stock && !p.stock.unlimited && (
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 ${p.stock.quantity === 0 ? 'bg-red-600 text-white' : 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'}`}>
-                            {p.stock.quantity === 0 ? 'ESGOTADO' : `${p.stock.quantity} un.`}
-                          </span>
-                        )}
-                        {p.promoGift && p.promoGift.buyQuantity > 0 && (
-                          <span className="text-[9px] font-bold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded shrink-0">🎁 PROMO</span>
-                        )}
-                        {p.name}
-                      </p>
-                      {p.sku && (
-                        <p className="text-[10px] font-mono text-muted-foreground/80 tracking-wide">SKU: {p.sku}</p>
-                      )}
-                      {(p.salesCount || 0) > 0 && (
-                        <p className="text-[10px] text-muted-foreground mt-0.5">📊 {p.salesCount!.toLocaleString('pt-BR')} vendido{p.salesCount === 1 ? '' : 's'}</p>
-                      )}
-                      {p.discountPercent ? (
-                        <p className="text-xs mt-1">
-                          <s className="text-gray-400">¥{p.prices.small.toLocaleString()}</s>{' '}
-                          <span className="text-red-600 font-bold">¥{Math.round(p.prices.small * (1 - p.discountPercent / 100)).toLocaleString()}</span>
-                        </p>
-                      ) : (
-                        <p className="text-xs text-primary font-bold mt-1">¥ {p.prices.small.toLocaleString()}</p>
-                      )}
-                      <div className="mt-auto flex gap-1 pt-2">
-                        <button onClick={() => openEdit(p)} className="flex-1 text-xs py-1.5 rounded-lg bg-secondary hover:bg-secondary/70 flex items-center justify-center gap-1">
-                          <Pencil className="w-3.5 h-3.5" /> Editar
-                        </button>
-                        <button onClick={() => remove(p)} className="px-2 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-          </div>
-        ))}
-      </div>
-
+      <ProductListView
+        grouped={grouped}
+        setSearchQuery={setSearchQuery}
+        setFilterCat={setFilterCat}
+        openEdit={openEdit}
+        remove={remove}
+      />
       {/* Modal de edição */}
       {editing && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -917,60 +759,13 @@ const ProductManager: React.FC = () => {
                 </div>
               </div>
 
-              {/* Variantes de preço (Pequeno/Médio/Grande/Kit) */}
-              <div>
-                <label className="text-sm font-semibold block mb-2">Tamanhos / unidades & preços (¥)</label>
-                <div className="space-y-2">
-                  {variants().map((v) => (
-                    <div key={v.id} className="flex items-center gap-2">
-                      <select
-                        value={ALL_PRESETS.includes(v.label) ? v.label : 'custom'}
-                        onChange={(e) => updateVariant(v.id, { label: e.target.value === 'custom' ? '' : e.target.value })}
-                        disabled={!canPrice}
-                        className="px-2 py-2 rounded-lg border border-border bg-background text-sm disabled:opacity-60"
-                      >
-                        <optgroup label="Tamanhos">
-                          {VARIANT_PRESETS.map((p) => <option key={p} value={p}>{p}</option>)}
-                        </optgroup>
-                        <optgroup label="Unidades">
-                          {UNIT_PRESETS.map((p) => <option key={p} value={p}>{p}</option>)}
-                        </optgroup>
-                        <option value="custom">Outro…</option>
-                      </select>
-                      {!ALL_PRESETS.includes(v.label) && (
-                        <input
-                          value={v.label}
-                          onChange={(e) => updateVariant(v.id, { label: e.target.value })}
-                          placeholder="Ex: Kit 3 unidades"
-                          disabled={!canPrice}
-                          className="w-36 px-2 py-2 rounded-lg border border-border bg-background text-sm disabled:opacity-60"
-                        />
-                      )}
-                      <input
-                        type="number"
-                        value={v.price || ''}
-                        onChange={(e) => updateVariant(v.id, { price: Number(e.target.value) })}
-                        placeholder="¥ preço"
-                        disabled={!canPrice}
-                        className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm disabled:opacity-60"
-                      />
-                      {variants().length > 1 && canPrice && (
-                        <button onClick={() => removeVariant(v.id)} className="p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 shrink-0">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                {canPrice && (
-                  <button onClick={addVariant} className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline">
-                    <Plus className="w-4 h-4" /> Adicionar opção
-                  </button>
-                )}
-                <p className="text-xs text-muted-foreground mt-2">
-                  {canPrice ? 'Preços em ienes (¥). O site converte automático para R$/€. O cliente escolhe o tamanho na página do produto.' : '🔒 Preço/custo só podem ser alterados por admin nível 3.'}
-                </p>
-              </div>
+              <ProductVariantsSection
+                variants={variants}
+                updateVariant={updateVariant}
+                canPrice={canPrice}
+                removeVariant={removeVariant}
+                addVariant={addVariant}
+              />
 
               {/* Desconto promocional + Ocultar */}
               <div className="grid grid-cols-2 gap-3">
@@ -1017,599 +812,57 @@ const ProductManager: React.FC = () => {
                   <p className="text-[11px] text-muted-foreground mt-1.5">Oculto = fica registrado, mas o cliente não vê.</p>
                 </div>
 
-                {/* Em Destaque na home */}
-                <div className="bg-secondary/40 border border-border rounded-lg p-3 flex flex-col justify-center col-span-2">
-                  <label className="text-sm font-semibold block mb-2 flex items-center gap-1.5">⭐ Em Destaque na Página Inicial</label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const turningOn = !editing.featured;
-                      setEditing({
-                        ...editing,
-                        featured: turningOn,
-                        featuredAt: turningOn ? (editing.featuredAt || new Date().toISOString()) : undefined,
-                      });
-                    }}
-                    className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-sm font-semibold transition-colors ${
-                      editing.featured
-                        ? 'bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border-amber-300'
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-300'
-                    }`}
-                  >
-                    <span>{editing.featured ? '⭐ Em destaque' : '☆ Sem destaque'}</span>
-                    <span className={`w-9 h-5 rounded-full relative transition-colors ${editing.featured ? 'bg-amber-500' : 'bg-gray-400'}`}>
-                      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-[left] ${editing.featured ? 'left-4' : 'left-0.5'}`} />
-                    </span>
-                  </button>
-                  {(() => {
-                    const featuredCount = products.filter(p => p.featured && p.id !== editing.id).length + (editing.featured ? 1 : 0);
-                    if (featuredCount > 4) {
-                      return (
-                        <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-1.5 leading-snug">
-                          ⚠️ {featuredCount} produtos em destaque. A home mostra <strong>4 por vez</strong> e alterna automaticamente <strong>a cada semana</strong>, dando vez aos próximos.
-                        </p>
-                      );
-                    }
-                    return (
-                      <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug">
-                        {featuredCount}/4 em destaque. Aparece na seção "Em Destaque" da home. Acima de 4, alternam semanalmente.
-                      </p>
-                    );
-                  })()}
-                </div>
-
-                {/* Hero Carrossel (topo da home) */}
-                <div className="bg-secondary/40 border border-border rounded-lg p-3 flex flex-col justify-center col-span-2">
-                  <label className="text-sm font-semibold block mb-2 flex items-center gap-1.5">🎬 Hero Carrossel (topo da home)</label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const turningOn = !editing.heroCarousel;
-                      setEditing({
-                        ...editing,
-                        heroCarousel: turningOn,
-                        heroCarouselAt: turningOn ? (editing.heroCarouselAt || new Date().toISOString()) : undefined,
-                      });
-                    }}
-                    className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-sm font-semibold transition-colors ${
-                      editing.heroCarousel
-                        ? 'bg-rose-100 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-300'
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-300'
-                    }`}
-                  >
-                    <span>{editing.heroCarousel ? '🎬 No hero' : '☆ Fora do hero'}</span>
-                    <span className={`w-9 h-5 rounded-full relative transition-colors ${editing.heroCarousel ? 'bg-rose-500' : 'bg-gray-400'}`}>
-                      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-[left] ${editing.heroCarousel ? 'left-4' : 'left-0.5'}`} />
-                    </span>
-                  </button>
-                  {(() => {
-                    const heroCount = products.filter(p => p.heroCarousel && p.id !== editing.id).length + (editing.heroCarousel ? 1 : 0);
-                    return (
-                      <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug">
-                        {heroCount === 0
-                          ? 'O hero mostra a curadoria fixa padrão quando nada está marcado.'
-                          : <>{heroCount} marcado(s). O hero exibe <strong>4 por vez</strong> + a <strong>promoção de início</strong> (sempre). Acima de 4, <strong>sorteia 4 diferentes</strong> a cada visita, sem repetir.</>}
-                      </p>
-                    );
-                  })()}
-                </div>
-
-                {/* Restrição de destino + Origem */}
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold block">Restrição de venda por destino</label>
-                  <select
-                    value={editing.deliveryRestrict || ''}
-                    onChange={e => setEditing({ ...editing, deliveryRestrict: (e.target.value as Product['deliveryRestrict']) || undefined })}
-                    className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
-                  >
-                    <option value="">Sem restrição (vende em qualquer destino)</option>
-                    <option value="exterior-only">🌍 Somente exterior — produto japonês, não vende dentro do Japão</option>
-                    <option value="japan-only">🇯🇵 Somente Japão — produto importado, vende só dentro do Japão</option>
-                  </select>
-                  <div className="flex items-center gap-2 mt-1">
-                    <label className="flex items-center gap-2 cursor-pointer select-none text-sm">
-                      <input
-                        type="checkbox"
-                        checked={!!editing.origin}
-                        onChange={e => setEditing({ ...editing, origin: e.target.checked ? 'importado' : undefined })}
-                        className="w-4 h-4 rounded accent-primary"
-                      />
-                      <span>📦 Marcar como <strong>Importado</strong> (produto nacional vendido no Japão — exibe badge na loja)</span>
-                    </label>
-                  </div>
-                  <div className="flex items-center gap-2 mt-2">
-                    <label className="flex items-center gap-2 cursor-pointer select-none text-sm">
-                      <input
-                        type="checkbox"
-                        checked={!!editing.noPsFee}
-                        onChange={e => setEditing({ ...editing, noPsFee: e.target.checked || undefined })}
-                        className="w-4 h-4 rounded accent-primary"
-                      />
-                      <span>💸 <strong>Isentar taxa de Personal Shopper</strong> (¥1.000/un — não cobra essa taxa neste produto)</span>
-                    </label>
-                  </div>
-                  <div className="flex items-center gap-2 mt-2">
-                    <label className="flex items-center gap-2 cursor-pointer select-none text-sm">
-                      <input
-                        type="checkbox"
-                        checked={!!editing.freeShippingSolo}
-                        onChange={e => setEditing({ ...editing, freeShippingSolo: e.target.checked || undefined })}
-                        className="w-4 h-4 rounded accent-primary"
-                      />
-                      <span>🚚 <strong>Frete grátis</strong> (só se este for o único produto do pedido, 1 unidade — se o cliente adicionar mais algo, o frete volta a ser cobrado)</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {/* Tags de tipo — usadas no filtro inteligente da loja */}
-              <div>
-                <label className="text-sm font-semibold block mb-1">
-                  🏷️ Tags de tipo <span className="text-xs font-normal text-muted-foreground">(filtro inteligente da loja)</span>
-                </label>
-                {(editing?.tags || []).length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mb-2">
-                    {(editing!.tags || []).map(tag => (
-                      <span key={tag} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold capitalize">
-                        {tag}
-                        <button type="button" onClick={() => removeTag(tag)} className="hover:text-red-500 transition-colors">
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <div className="flex gap-2">
-                  <input
-                    value={tagInput}
-                    onChange={e => setTagInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { addTag(); e.preventDefault(); } }}
-                    placeholder="Ex: shampoo, hidratante, filtro solar"
-                    className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm"
-                  />
-                  <button
-                    type="button"
-                    onClick={addTag}
-                    disabled={!tagInput.trim()}
-                    className="px-3 py-2 rounded-lg bg-secondary hover:bg-secondary/70 text-sm font-semibold disabled:opacity-40"
-                  >
-                    + Adicionar
-                  </button>
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-1">Separe por vírgula. Ex: <em>shampoo · hidratante · filtro solar · protetor labial</em></p>
-              </div>
-
-              {/* Lançamento + Quantidade vendida */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg p-3">
-                  <label className="text-sm font-semibold block mb-2">🆕 Lançamento</label>
-                  <button
-                    type="button"
-                    onClick={() => setEditing({ ...editing!, isNew: !editing!.isNew })}
-                    className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-sm font-semibold w-full transition-colors ${
-                      editing?.isNew
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-300'
-                        : 'bg-card text-muted-foreground border-border'
-                    }`}
-                  >
-                    <span>{editing?.isNew ? '✅ É lançamento' : 'Produto comum'}</span>
-                    <span className={`w-9 h-5 rounded-full relative transition-colors ${editing?.isNew ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-[left] ${editing?.isNew ? 'left-4' : 'left-0.5'}`} />
-                    </span>
-                  </button>
-                  <p className="text-[11px] text-blue-600/70 dark:text-blue-400/70 mt-1.5">Aparece em destaque no filtro "Lançamento".</p>
-                </div>
-
-                <div className="bg-secondary/40 border border-border rounded-lg p-3">
-                  <label className="text-sm font-semibold block mb-1">📊 Qtd. vendida</label>
-                  <input
-                    type="number"
-                    value={editing?.salesCount ?? 0}
-                    readOnly
-                    disabled
-                    className="w-full px-3 py-2 rounded-lg border border-border bg-secondary/60 text-sm text-muted-foreground cursor-not-allowed"
-                  />
-                  <p className="text-[11px] text-muted-foreground mt-1.5">Somente leitura — incrementado automaticamente a cada pedido confirmado.</p>
-                </div>
-
-                <div className="bg-secondary/40 border border-border rounded-lg p-3">
-                  <label className="text-sm font-semibold block mb-1">⭐ Avaliação (1–5)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={5}
-                    step={0.1}
-                    value={editing?.rating ?? ''}
-                    onChange={e => {
-                      const raw = e.target.value;
-                      const n = raw === '' ? undefined : Math.min(5, Math.max(0, Number(raw)));
-                      setEditing({ ...editing!, rating: n });
-                    }}
-                    placeholder="Ex: 4.8"
-                    className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
-                  />
-                  <p className="text-[11px] text-muted-foreground mt-1.5">Deixe vazio para não mostrar estrelas na loja.</p>
-                </div>
-              </div>
-
-              {/* Estoque */}
-              <div className="bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 rounded-lg p-3">
-                <label className="text-sm font-semibold flex items-center gap-1.5 mb-2">
-                  <InfinityIcon className="w-4 h-4 text-slate-500" /> Estoque
-                </label>
-                <div className="flex gap-4 mb-3">
-                  {(['unlimited', 'limited'] as const).map((type) => {
-                    const isUnlimited = type === 'unlimited';
-                    const checked = isUnlimited ? (!editing.stock || editing.stock.unlimited) : (editing.stock && !editing.stock.unlimited);
-                    return (
-                      <label key={type} className="flex items-center gap-2 cursor-pointer select-none">
-                        <input
-                          type="radio"
-                          name="stockType"
-                          checked={!!checked}
-                          onChange={() => setEditing({ ...editing, stock: { unlimited: isUnlimited, quantity: editing.stock?.quantity || 0 } })}
-                          className="accent-primary"
-                        />
-                        <span className="text-sm font-medium">{isUnlimited ? 'Ilimitado' : 'Quantidade específica'}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-                {editing.stock && !editing.stock.unlimited && (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min={0}
-                      value={editing.stock.quantity}
-                      onChange={(e) => setEditing({ ...editing, stock: { unlimited: false, quantity: Math.max(0, Number(e.target.value) || 0) } })}
-                      placeholder="Ex: 25"
-                      className="w-28 px-3 py-2 rounded-lg border border-border bg-background text-sm"
-                    />
-                    <span className="text-xs text-muted-foreground">unidades em estoque</span>
-                    {editing.stock.quantity === 0 && (
-                      <span className="text-[11px] font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded">ESGOTADO — aparecerá Sold Out</span>
-                    )}
-                  </div>
-                )}
-                <p className="text-[11px] text-muted-foreground mt-1.5">
-                  A cada venda confirmada o estoque é descontado automaticamente. Ao chegar a zero aparece tarja "Sold Out".
-                </p>
-              </div>
-
-              {/* Estoque em outro país (empresa parceira): preço fixo na moeda de lá */}
-              <LocalStockFields value={editing.localStock} onChange={(localStock) => setEditing({ ...editing, localStock })} />
-
-              {/* Promoção: Compre X, ganhe +1 deste mesmo produto grátis */}
-              <div className="bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 rounded-lg p-3 space-y-3">
-                <label className="text-sm font-semibold flex items-center gap-1.5">
-                  <Gift className="w-4 h-4 text-purple-500" /> Promoção: Compre X, ganhe +1 grátis
-                </label>
-
-                {/* Produto que será dado = sempre este mesmo */}
-                <div className="flex items-center gap-2 bg-purple-100 dark:bg-purple-900/40 rounded-lg px-3 py-2">
-                  {editing.image && <img src={editing.image} alt={editing.name} className="w-8 h-8 rounded object-cover shrink-0" />}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-purple-800 dark:text-purple-200 truncate">{editing.name || '(nome do produto)'}</p>
-                    <p className="text-[10px] text-purple-600">Este produto será o brinde</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1">Compre quantos para ganhar +1? (0 = sem promo)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={editing.promoGift?.buyQuantity ?? 0}
-                      onChange={(e) => {
-                        const qty = Number(e.target.value) || 0;
-                        setEditing({ ...editing, promoGift: qty > 0
-                          ? { buyQuantity: qty, giftProductId: editing.id, giftProductName: editing.name, minOrderValueYen: editing.promoGift?.minOrderValueYen }
-                          : undefined });
-                      }}
-                      placeholder="Ex: 2"
-                      className="w-24 px-3 py-2 rounded-lg border border-border bg-background text-sm"
-                    />
-                  </div>
-
-                  {editing.promoGift && (
-                    <div>
-                      <label className="text-xs text-muted-foreground block mb-1">Gasto mínimo no carrinho (¥) — 0 = sem mínimo</label>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <input
-                          type="number"
-                          min={0}
-                          value={editing.promoGift.minOrderValueYen ?? 0}
-                          onChange={(e) => {
-                            const val = Number(e.target.value) || 0;
-                            setEditing({ ...editing, promoGift: { ...editing.promoGift!, minOrderValueYen: val > 0 ? val : undefined } });
-                          }}
-                          placeholder="Ex: 3000"
-                          className="w-32 px-3 py-2 rounded-lg border border-border bg-background text-sm"
-                        />
-                        {(editing.promoGift.minOrderValueYen ?? 0) > 0 && (
-                          <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                            ≈ <strong>{formatPrice(fxConvertYen(editing.promoGift.minOrderValueYen!, 'BRL'), 'BRL')}</strong>
-                            {' · '}
-                            <strong>{formatPrice(fxConvertYen(editing.promoGift.minOrderValueYen!, 'EUR'), 'EUR')}</strong>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {editing.promoGift && editing.promoGift.buyQuantity > 0 && (
-                  <p className="text-[11px] text-purple-700 dark:text-purple-300">
-                    🎁 Compre {editing.promoGift.buyQuantity}x
-                    {editing.promoGift.minOrderValueYen ? ` (ou gaste ¥${editing.promoGift.minOrderValueYen.toLocaleString()} no total)` : ''}
-                    {' '}→ ganhe +1 <strong>{editing.name || 'este produto'}</strong> grátis
-                  </p>
-                )}
-                <p className="text-[11px] text-muted-foreground">0 = sem promoção ativa.</p>
-              </div>
-
-              {/* Custo + margem de lucro — SÓ ADMIN */}
-              <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-                <label className="text-sm font-semibold flex items-center gap-1.5 mb-2">
-                  🔒 Custo & Margem <span className="text-[10px] font-normal text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">interno</span>
-                </label>
-
-                <div className="flex items-center gap-2">
-                  {/* Custo de aquisição */}
-                  <div className="flex-1 min-w-0">
-                    <span className="text-[11px] text-muted-foreground">Custo (¥)</span>
-                    <input
-                      type="number"
-                      value={editing.cost || ''}
-                      onChange={(e) => {
-                        const cost = Number(e.target.value);
-                        if (marginPct > 0 && cost > 0) {
-                          const selling = Math.round(cost * (1 + marginPct / 100));
-                          const vs = variants().map((v, i) => i === 0 ? { ...v, price: selling } : v);
-                          setEditing({ ...editing, cost, variants: vs, prices: { ...editing.prices, small: selling } });
-                        } else {
-                          setEditing({ ...editing, cost });
-                        }
-                      }}
-                      placeholder="ex: 500"
-                      disabled={!canPrice}
-                      className="w-full px-3 py-2 rounded-lg border border-amber-300 bg-background disabled:opacity-60 disabled:cursor-not-allowed text-sm"
-                    />
-                  </div>
-
-                  {/* Preço de venda calculado */}
-                  <div className="shrink-0">
-                    <span className="text-[11px] text-muted-foreground">Venda (¥)</span>
-                    <div className={`px-3 py-2 rounded-lg border text-sm font-semibold min-w-[80px] text-center ${
-                      editing.cost && marginPct > 0
-                        ? 'border-green-300 bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-400'
-                        : 'border-border bg-muted text-muted-foreground'
-                    }`}>
-                      {editing.cost && marginPct > 0
-                        ? `¥${Math.round(editing.cost * (1 + marginPct / 100)).toLocaleString()}`
-                        : '—'}
-                    </div>
-                  </div>
-                </div>
-
-                <p className="text-xs text-amber-700/80 dark:text-amber-400/80 mt-1.5">
-                  {editing.cost
-                    ? `Lucro: ¥${Math.round(editing.cost).toLocaleString()} · markup fixo 100% · O cliente NUNCA vê o custo.`
-                    : 'Preencha o custo para calcular o preço de venda automaticamente.'}
-                </p>
-              </div>
-
-              <div className="bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900 rounded-lg p-3">
-                <label className="text-sm font-semibold block mb-2">
-                  Medidas da embalagem para frete (mm)
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <span className="text-[11px] text-muted-foreground">Largura (mm)</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step="1"
-                      value={dimMm(editing.packageDimensionsCm?.widthCm)}
-                      onChange={(e) => updatePackageDimension('widthCm', e.target.value)}
-                      placeholder="ex: 54"
-                      className="w-full px-3 py-2 rounded-lg border border-orange-200 bg-background text-sm"
-                    />
-                  </div>
-                  <div>
-                    <span className="text-[11px] text-muted-foreground">Comprimento (mm)</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step="1"
-                      value={dimMm(editing.packageDimensionsCm?.lengthCm)}
-                      onChange={(e) => updatePackageDimension('lengthCm', e.target.value)}
-                      placeholder="ex: 84"
-                      className="w-full px-3 py-2 rounded-lg border border-orange-200 bg-background text-sm"
-                    />
-                  </div>
-                  <div>
-                    <span className="text-[11px] text-muted-foreground">Altura (mm)</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step="1"
-                      value={dimMm(editing.packageDimensionsCm?.heightCm)}
-                      onChange={(e) => updatePackageDimension('heightCm', e.target.value)}
-                      placeholder="ex: 192"
-                      className="w-full px-3 py-2 rounded-lg border border-orange-200 bg-background text-sm"
-                    />
-                  </div>
-                </div>
-                <p className="text-[11px] text-orange-700 dark:text-orange-300 mt-2 leading-relaxed">
-                  Digite em <strong>milímetros</strong> (ex: 54 × 84 × 192 mm). O frete soma +{PACKAGE_SAFETY_MARGIN_CM}cm de margem. Fonte: {editing.packageDimensionsCm?.source || 'manual/nao informado'}.
-                </p>
-                <div className="mt-3">
-                  <span className="text-[11px] text-muted-foreground">Peso da embalagem (g)</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step="1"
-                    value={editing.weightGrams ?? ''}
-                    onChange={(e) => setEditing({ ...editing, weightGrams: e.target.value === '' ? undefined : Number(e.target.value) })}
-                    placeholder="ex: 500"
-                    className="w-full px-3 py-2 rounded-lg border border-orange-200 bg-background text-sm mt-1"
-                  />
-                  <label className="flex items-center gap-2 mt-2 text-xs font-medium cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={editing.weightVerified === true}
-                      onChange={(e) => setEditing({ ...editing, weightVerified: e.target.checked })}
-                      className="w-4 h-4"
-                    />
-                    Peso conferido (pesei na balança / fonte confiável)
-                  </label>
-                  <p className="text-[11px] text-orange-700 dark:text-orange-300 mt-1">
-                    Peso do produto com o frasco/caixa dele. {editing.weightVerified
-                      ? 'Conferido: o frete usa o peso exato, sem margem.'
-                      : 'Não conferido: o frete soma 200 g de margem por unidade (produtos abaixo de 2 kg).'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Descrição */}
-              <div>
-                <label className="text-sm font-semibold block mb-1">Descrição</label>
-                <textarea
-                  value={editing.description}
-                  onChange={(e) => setEditing({ ...editing, description: e.target.value })}
-                  rows={4}
-                  placeholder="Descreva o produto..."
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background resize-y"
+                <ProductHomeFeatureSection
+                  editing={editing}
+                  setEditing={setEditing}
+                  products={products}
                 />
               </div>
 
-              {/* Fotos */}
-              <div>
-                <label className="text-sm font-semibold block mb-1">Fotos (até {MAX_PHOTOS}) — arraste para reordenar</label>
-                <div className="flex flex-wrap gap-3">
-                  {(editing.gallery || []).map((img, idx) => (
-                    <div
-                      key={idx}
-                      draggable
-                      onDragStart={() => setDragIndex(idx)}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={(e) => { e.preventDefault(); if (dragIndex !== null) moveImage(dragIndex, idx); setDragIndex(null); }}
-                      onDragEnd={() => setDragIndex(null)}
-                      className={cn(
-                        "relative w-20 h-20 rounded-lg overflow-hidden border-2 group cursor-grab active:cursor-grabbing transition",
-                        dragIndex === idx ? "border-primary opacity-50 scale-95" : "border-border"
-                      )}
-                      title="Arraste para reordenar"
-                    >
-                      <img src={img} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover pointer-events-none" />
-                      {idx === 0 ? (
-                        <span className={cn(
-                          "absolute top-0 left-0 text-[9px] px-1 rounded-br font-bold",
-                          editing.videoCover ? "bg-black/50 text-white" : "bg-primary text-primary-foreground"
-                        )}>
-                          {editing.videoCover ? 'Poster' : 'Capa'}
-                        </span>
-                      ) : (
-                        <span className="absolute top-0 left-0 bg-black/50 text-white text-[9px] px-1 rounded-br">{idx + 1}</span>
-                      )}
-                      <span className="absolute bottom-0.5 left-0.5 bg-black/50 text-white rounded p-0.5 opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 transition">
-                        <GripVertical className="w-3 h-3" />
-                      </span>
-                      {(idx !== 0 || editing.videoCover) && (
-                        <button
-                          type="button"
-                          onClick={() => setPhotoAsCover(idx)}
-                          title="Usar esta foto como capa"
-                          className="absolute bottom-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 transition"
-                        >
-                          <Star className="w-3 h-3" />
-                        </button>
-                      )}
-                      <button
-                        onClick={() => removeImage(idx)}
-                        className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 transition"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
-                  {(editing.gallery?.length || 0) < MAX_PHOTOS && (
-                    <button
-                      onClick={() => fileRef.current?.click()}
-                      disabled={uploading}
-                      className="w-20 h-20 rounded-lg border-2 border-dashed border-border flex items-center justify-center text-muted-foreground hover:border-primary hover:text-primary transition"
-                    >
-                      {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-6 h-6" />}
-                    </button>
-                  )}
-                </div>
-                <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => handleFiles(e.target.files)} />
-                <p className="text-xs text-muted-foreground mt-1">
-                  🖱️ Arraste para reordenar — a <strong>primeira é a capa</strong>. Passe o mouse e clique na <Star className="w-3 h-3 inline -mt-0.5" /> de outra foto para torná-la a capa. As imagens são reduzidas automaticamente.
-                </p>
-              </div>
-
-              {/* Vídeo do produto */}
-              <div>
-                <label className="text-sm font-semibold block mb-1">Vídeo do produto (opcional, mp4)</label>
-                {editing.video ? (
-                  <div className="flex items-start gap-3">
-                    <video
-                      src={editing.video}
-                      controls
-                      muted
-                      playsInline
-                      className="w-40 h-40 rounded-lg border border-border object-cover bg-black"
-                    />
-                    <div className="flex flex-col gap-2">
-                      <label className="flex items-center gap-2 cursor-pointer select-none text-sm">
-                        <input
-                          type="checkbox"
-                          checked={!!editing.videoCover}
-                          onChange={(e) => setEditing({ ...editing, videoCover: e.target.checked || undefined })}
-                          className="w-4 h-4 rounded accent-primary"
-                        />
-                        <span>🎬 <strong>Usar vídeo como capa</strong></span>
-                      </label>
-                      <p className="text-[11px] text-muted-foreground -mt-1 max-w-[220px]">
-                        {editing.videoCover
-                          ? 'O vídeo toca direto no card e na galeria — a 1ª foto vira o poster (thumbnail).'
-                          : 'Sem isso, o vídeo só toca ao passar o mouse sobre o produto.'}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => videoRef.current?.click()}
-                        disabled={uploadingVideo}
-                        className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/70 flex items-center gap-1.5"
-                      >
-                        {uploadingVideo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                        Trocar vídeo
-                      </button>
-                      <button
-                        type="button"
-                        onClick={removeVideo}
-                        className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 flex items-center gap-1.5"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" /> Remover vídeo
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => videoRef.current?.click()}
-                    disabled={uploadingVideo}
-                    className="w-40 h-20 rounded-lg border-2 border-dashed border-border flex items-center justify-center gap-2 text-muted-foreground hover:border-primary hover:text-primary transition text-sm font-semibold"
-                  >
-                    {uploadingVideo ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
-                    {uploadingVideo ? 'Enviando…' : 'Adicionar vídeo'}
-                  </button>
-                )}
-                <input ref={videoRef} type="file" accept="video/mp4,video/webm,video/quicktime" hidden onChange={(e) => handleVideoFile(e.target.files)} />
-                <p className="text-xs text-muted-foreground mt-1">🎬 Mostrado ao passar o mouse sobre o produto na loja (hover). Máximo {MAX_VIDEO_MB}MB.</p>
-              </div>
+              <ProductTagsSection
+                editing={editing}
+                removeTag={removeTag}
+                tagInput={tagInput}
+                setTagInput={setTagInput}
+                addTag={addTag}
+                setEditing={setEditing}
+              />
+              <ProductStockSection
+                editing={editing}
+                setEditing={setEditing}
+              />
+              <ProductPartnerStockSection
+                editing={editing}
+                setEditing={setEditing}
+                marginPct={marginPct}
+                variants={variants}
+                canPrice={canPrice}
+                dimMm={dimMm}
+                updatePackageDimension={updatePackageDimension}
+              />
+              <ProductDescriptionSection
+                editing={editing}
+                setEditing={setEditing}
+              />
+              <ProductPhotosSection
+                editing={editing}
+                setDragIndex={setDragIndex}
+                dragIndex={dragIndex}
+                moveImage={moveImage}
+                setPhotoAsCover={setPhotoAsCover}
+                removeImage={removeImage}
+                fileRef={fileRef}
+                uploading={uploading}
+                handleFiles={handleFiles}
+              />
+              <ProductVideoSection
+                editing={editing}
+                setEditing={setEditing}
+                videoRef={videoRef}
+                uploadingVideo={uploadingVideo}
+                removeVideo={removeVideo}
+                handleVideoFile={handleVideoFile}
+              />
 
               {/* Modelo 3D (aba "3D" + AR na página do produto) — desligado em FEATURES.product3d */}
               {FEATURES.product3d && (

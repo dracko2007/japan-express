@@ -1,4 +1,5 @@
 @echo off
+cd /d "%~dp0\..\.."
 title Japan Express - WhatsApp & ngrok
 chcp 65001 > nul
 echo ========================================================

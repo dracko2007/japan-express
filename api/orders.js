@@ -73,7 +73,7 @@ function parseCustomer(raw, user, country) {
   // A aduana brasileira exige o CPF do destinatário, então para o Brasil ele
   // não é opcional na prática — o pedido sem CPF trava na importação. Exigir
   // aqui, além de evitar esse travamento, é o que dá ao guarda de cupom uma
-  // âncora que o cliente não troca à vontade (ver ALTO 3 do AUDITORIA.md).
+  // âncora que o cliente não troca à vontade (ver ALTO 3 do docs/AUDITORIA.md).
   // Fora do Brasil não há documento equivalente e o campo segue opcional.
   //
   // Regressão: um commit de "remediação de segurança" (f69dbd2) trocou o

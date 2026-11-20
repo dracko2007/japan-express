@@ -1,4 +1,4 @@
-// MEDIO 2 do AUDITORIA.md: o saldo de pontos era conferido fora de transação e
+// MEDIO 2 do docs/AUDITORIA.md: o saldo de pontos era conferido fora de transação e
 // só debitado no `fulfillOrder`. Entre criar o pedido e confirmar o pagamento
 // os pontos ficavam livres — dois checkouts do mesmo cliente liam o mesmo
 // saldo, os dois passavam, os dois eram cobrados, e o segundo estourava

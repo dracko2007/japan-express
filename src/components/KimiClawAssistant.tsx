@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { packedWeightG, parcelWeightG, productPackedWeightG } from '../../shared/weight.js';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { Send, X, Bot, Sparkles, Loader2, MessageSquare, Trash, CornerDownLeft, Command, HelpCircle, Smartphone, ShoppingCart, ChevronRight } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { X, Bot, Sparkles, Loader2 } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { useUser } from '@/context/UserContext';
@@ -16,82 +16,24 @@ import { runAgentTurn } from '@/services/assistantAgent';
 import { productEnglishName } from '@/utils/productName';
 import { effectiveYen } from '@/utils/pricing';
 import { catalogShippingYen } from '@/utils/catalogShipping';
-import { getELightRate, getAirParcelRate, getEmsRate, countryToZone } from '@/utils/japanPostRates';
 import { convertYen as fxConvert } from '@/services/fxService';
 import { authenticatedFetch } from '@/services/authenticatedFetch';
 import { toast } from 'sonner';
-import { COMPANY_PROFILE } from '@/config/companyProfile';
 import { PARTNERSHIP_KEYWORDS, partnershipAnswer, partnershipExamples } from '../../shared/partnership.js';
 import { onOpenRequest, setMinimized, useMinimized } from '@/utils/floatingWidgets';
 import { useDraggableBubble } from '@/hooks/useDraggableBubble';
+import { WHATSAPP, WHATSAPP_LINK, LOCAL_SKILL_RE, AGENT_STEP_LABELS, WEIGHT_BY_CATEGORY, DEFAULT_WEIGHT, AI_HISTORY_TURNS, AGENT_HISTORY_MESSAGES } from '@/components/kimiclaw/constants';
+import type { Message, OrderRef } from '@/components/kimiclaw/types';
+import { calculateShipping, getProductWeight } from '@/components/kimiclaw/shipping';
+import { normalizeText, tokenize, detectCategory, CATEGORY_LABEL } from '@/components/kimiclaw/textSearch';
+import KimiInputForm from '@/components/kimiclaw/KimiInputForm';
+import KimiSkillSuggestions from '@/components/kimiclaw/KimiSkillSuggestions';
+import KimiShippingResults from '@/components/kimiclaw/KimiShippingResults';
+import KimiNextSteps from '@/components/kimiclaw/KimiNextSteps';
+import KimiProductResults from '@/components/kimiclaw/KimiProductResults';
+import KimiConsentActions from '@/components/kimiclaw/KimiConsentActions';
+import KimiHeader from '@/components/kimiclaw/KimiHeader';
 
-// Formato internacional em toda mensagem: o cliente que lê isto está no Brasil
-// e disca de lá. O link `wa.me` usa os dígitos puros, sem `+` nem separador.
-const WHATSAPP = COMPANY_PROFILE.whatsapp.international;
-const WHATSAPP_LINK = `wa.me/${COMPANY_PROFILE.whatsapp.digits}`;
-
-interface ShippingOption {
-  carrier: string;
-  basePrice: number;
-  ratePerKg: number;
-  currency: 'BRL' | 'JPY' | 'EUR' | 'USD';
-  daysEstimate?: string;
-}
-
-interface Message {
-  id: string;
-  sender: 'user' | 'kimi';
-  text: string;
-  timestamp: Date;
-  agentSteps?: string[];
-  isConsentPrompt?: boolean;
-  orderToShare?: any;
-  products?: Product[];
-  shippingResults?: ShippingOption[];
-  shippingCountry?: string;
-  shippingWeight?: number;
-  /** Botões de próximo passo sugeridos pelo agente. */
-  actions?: AssistantAction[];
-  /** Produtos/cotação desta resposta, enviados à IA na próxima pergunta (não aparece na tela). */
-  agentContext?: string;
-}
-
-// Comandos que continuam nas regras locais (não precisam de IA nem de ferramentas).
-const LOCAL_SKILL_RE = /\b(limpar|esvaziar|clear|cupom|coupon|novidades|notificac\w*|vlog|depoimentos?|unboxing|japones|nihongo|portugues|ingles|english)\b|日本語/;
-
-const AGENT_STEP_LABELS: Record<string, Record<'pt' | 'en' | 'ja', string>> = {
-  buscar_produtos: { pt: '🔍 Buscando no catálogo…', en: '🔍 Searching the catalog…', ja: '🔍 商品を検索中…' },
-  cotar_pedido: { pt: '📦 Calculando frete e total…', en: '📦 Calculating shipping and total…', ja: '📦 送料と合計を計算中…' },
-  converter_moeda: { pt: '💱 Convertendo moeda…', en: '💱 Converting currency…', ja: '💱 通貨を換算中…' },
-  ver_carrinho: { pt: '🛒 Conferindo o carrinho…', en: '🛒 Checking your cart…', ja: '🛒 カートを確認中…' },
-  adicionar_ao_carrinho: { pt: '➕ Adicionando ao carrinho…', en: '➕ Adding to cart…', ja: '➕ カートに追加中…' },
-  painel_financeiro: { pt: '📊 Consultando o balanço…', en: '📊 Checking the financials…', ja: '📊 収支を確認中…' },
-  margem_produtos: { pt: '💹 Calculando margens…', en: '💹 Calculating margins…', ja: '💹 利益率を計算中…' },
-  estoque: { pt: '📦 Conferindo o estoque…', en: '📦 Checking stock…', ja: '📦 在庫を確認中…' },
-};
-
-const ACTION_LABELS: Record<AssistantAction, Record<'pt' | 'en' | 'ja', string>> = {
-  finalizar_compra: { pt: '✅ Finalizar compra', en: '✅ Checkout', ja: '✅ 購入手続きへ' },
-  ver_carrinho: { pt: '🛒 Ver carrinho', en: '🛒 View cart', ja: '🛒 カートを見る' },
-  continuar_comprando: { pt: '🛍️ Continuar comprando', en: '🛍️ Keep shopping', ja: '🛍️ 買い物を続ける' },
-  falar_whatsapp: { pt: '💬 Falar no WhatsApp', en: '💬 Chat on WhatsApp', ja: '💬 WhatsAppで相談' },
-  faca_seu_pedido: { pt: '📝 Faça seu Pedido', en: '📝 Custom order', ja: '📝 取り寄せ依頼' },
-};
-
-// Peso estimado (g) por categoria e variante — usado quando o produto não tem weightGrams.
-const WEIGHT_BY_CATEGORY: Record<string, { small: number; large: number }> = {
-  doces:      { small: 280, large: 800 },
-  cosmeticos: { small: 200, large: 500 },
-  papelaria:  { small: 150, large: 400 },
-  acessorios: { small: 300, large: 800 },
-};
-const DEFAULT_WEIGHT = { small: 300, large: 800 };
-
-// Turnos de conversa enviados à IA. 6 estourava rápido: uma recomendação seguida
-// de duas perguntas de acompanhamento já empurrava o produto para fora da janela.
-const AI_HISTORY_TURNS = 12;
-// Agente: menos mensagens (cada chamada reenviaria tudo; o "[contexto]" guarda os produtos).
-const AGENT_HISTORY_MESSAGES = 8;
 
 const KimiClawAssistant: React.FC = () => {
   const { addToCart, clearCart, items: cartItems } = useCart();
@@ -289,34 +231,6 @@ const KimiClawAssistant: React.FC = () => {
     return () => clearTimeout(timer);
   }, [location]);
 
-  // Normalize text for search - remove accents and lowercase
-  // Aceita campo vazio: um único produto sem descrição/sabor derrubava a busca
-  // inteira (TypeError) e o chat respondia "Desculpe, tive um problema".
-  const normalizeText = (text: string | null | undefined): string => {
-    return String(text ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-  };
-
-  // Palavras de ligação/comando ignoradas na busca (pt/en)
-  const STOP_WORDS = new Set([
-    'por', 'pro', 'pra', 'para', 'o', 'a', 'os', 'as', 'um', 'uma', 'uns', 'umas',
-    'de', 'do', 'da', 'dos', 'das', 'e', 'em', 'no', 'na', 'com', 'me', 'meu', 'minha',
-    'tem', 'ter', 'tinha', 'algum', 'alguma', 'algo', 'quero', 'queria', 'gostaria',
-    'mostrar', 'mostra', 'ver', 'buscar', 'procurar', 'pesquisar', 'achar', 'encontrar',
-    'voce', 'vc', 'ai', 'existe', 'vende', 'vendem', 'possui', 'teria', 'produto', 'produtos',
-    'search', 'find', 'show', 'want', 'the', 'for', 'of', 'an', 'is', 'do', 'you', 'have',
-  ]);
-
-  // Quebra a busca em palavras úteis (ignora ligação e palavras curtas)
-  const tokenize = (query: string): string[] =>
-    normalizeText(query)
-      .split(/[\s,.;:!?'"()/_\-]+/)
-      .map((t) => t.trim())
-      .filter((t) => t.length >= 2 && !STOP_WORDS.has(t));
-
-  // Pontua produtos por relevância à query (pontua por palavra → bem mais tolerante).
-  // Base reutilizada tanto pela busca determinística (searchProducts) quanto pelo
-  // filtro de catálogo relevante mandado pra IA (relevantCatalogForAI) — mesma
-  // lógica de match em ambos os casos, sem duplicar.
   const categoryAliases: Record<string, string[]> = {
     'doces': ['doce', 'snack', 'chocolate', 'candy', 'sweet', 'お菓子', 'okashi', 'kitkat', 'kit kat', 'pocky', 'jagariko', 'calbee', 'nestle', 'meiji', 'glico'],
     'cosmeticos': ['cosmetico', 'skincare', 'protetor', 'creme', 'mascara', 'skin', 'lotion', 'コスメ', '化粧品', 'biore', 'hada', 'dhc', 'shiseido'],
@@ -394,23 +308,6 @@ const KimiClawAssistant: React.FC = () => {
     return products.filter((p) => !p.hidden).slice(0, limit);
   };
 
-  // Detecta intenção de navegar por CATEGORIA ("quais doces tem", "me mostra cosméticos")
-  const CATEGORY_WORDS: Record<string, string[]> = {
-    doces: ['doce', 'doces', 'snack', 'snacks', 'chocolate', 'chocolates', 'guloseima', 'salgadinho', 'candy', 'sweets', 'okashi'],
-    cosmeticos: ['cosmetico', 'cosmeticos', 'cosmetic', 'skincare', 'beleza', 'maquiagem', 'creme', 'cremes', 'protetor'],
-    acessorios: ['acessorio', 'acessorios', 'figura', 'figuras', 'colecionavel', 'colecionaveis', 'anime', 'figure', 'goods'],
-    papelaria: ['papelaria', 'caneta', 'canetas', 'caderno', 'cadernos', 'escritorio', 'stationery'],
-  };
-  const CATEGORY_LABEL: Record<string, string> = {
-    doces: 'doces', cosmeticos: 'cosméticos', acessorios: 'acessórios', papelaria: 'papelaria',
-  };
-  const detectCategory = (query: string): string | null => {
-    const toks = tokenize(query);
-    for (const [cat, words] of Object.entries(CATEGORY_WORDS)) {
-      if (words.some((w) => toks.includes(normalizeText(w)))) return cat;
-    }
-    return null;
-  };
   // Mostra todos os produtos de uma categoria. Retorna true se mostrou algo.
   const showCategory = (cat: string): boolean => {
     const list = products.filter((p) => p.category === cat).slice(0, 8);
@@ -430,95 +327,6 @@ const KimiClawAssistant: React.FC = () => {
     return true;
   };
 
-  // Frete REAL por país e peso — mesma tabela do Japan Post usada no Checkout,
-  // no feed do Google e no orçamento (getELightRate/getAirParcelRate/getEmsRate).
-  // Antes esta função inventava fórmula linear (base + R$/kg) com nomes de
-  // transportadora que não existem no sistema real ("PAC", "Prioritário") — dava
-  // até 5,6x o valor real do frete. Japão doméstico retorna [] de propósito: o
-  // preço real depende da província exata de entrega (zona 1-4 de Hiroshima) e
-  // essa informação não é coletada aqui — o chamador orienta a usar a calculadora
-  // real em vez de mostrar um valor chutado.
-  const calculateShipping = (country: string, weightKg: number): ShippingOption[] => {
-    const normalizedCountry = normalizeText(country);
-
-    // Detect country from aliases. EUA primeiro: "estados unidos" contém "es"
-    // (viraria Espanha) e "united" contém "it" (viraria Itália).
-    let detectedCountry = country;
-    if (normalizedCountry.includes('estados unidos') || normalizedCountry.includes('united states') || /\b(eua|usa|us)\b/.test(normalizedCountry)) detectedCountry = 'Estados Unidos';
-    else if (normalizedCountry.includes('brasil') || normalizedCountry.includes('brazil') || normalizedCountry.includes('br')) detectedCountry = 'Brasil';
-    else if (normalizedCountry.includes('japao') || normalizedCountry.includes('japan') || normalizedCountry.includes('ja')) detectedCountry = 'Japão';
-    else if (normalizedCountry.includes('portugal') || normalizedCountry.includes('pt')) detectedCountry = 'Portugal';
-    else if (normalizedCountry.includes('franca') || normalizedCountry.includes('france') || normalizedCountry.includes('fr')) detectedCountry = 'França';
-    else if (normalizedCountry.includes('italia') || normalizedCountry.includes('italy') || normalizedCountry.includes('it')) detectedCountry = 'Itália';
-    else if (normalizedCountry.includes('espanha') || normalizedCountry.includes('spain') || normalizedCountry.includes('es')) detectedCountry = 'Espanha';
-
-    if (detectedCountry === 'Japão') return [];
-
-    const zone = countryToZone(detectedCountry);
-    const weightG = Math.max(100, Math.round(weightKg * 1000));
-
-    // EUA: desde 15/10/2026 só sai com imposto pré-pago (DDP), e o único
-    // serviço com DDP para loja é o EMS — mesma regra do checkout
-    // (`src/utils/shippingQuote.ts`). Valor em dólar.
-    if (detectedCountry === 'Estados Unidos') {
-      const usEmsYen = getEmsRate(weightG, zone);
-      return usEmsYen ? [{
-        carrier: 'Japan Post EMS (DDP — imposto pré-pago, já no total)',
-        basePrice: Math.round(fxConvert(usEmsYen, 'USD')),
-        ratePerKg: 0,
-        currency: 'USD',
-        daysEstimate: '10-12',
-      }] : [];
-    }
-
-    const currency: 'BRL' | 'EUR' = ['Portugal', 'França', 'Itália', 'Espanha'].includes(detectedCountry) ? 'EUR' : 'BRL';
-    const daysByZone: Record<number, { light: string; air: string; ems: string }> = {
-      1: { light: '6-10', air: '4-7', ems: '2-4' },
-      2: { light: '7-12', air: '5-9', ems: '3-5' },
-      3: { light: '7-14', air: '6-10', ems: '4-7' },
-      4: { light: '7-14', air: '6-10', ems: '3-6' },
-      5: { light: '20-40', air: '10-15', ems: '18' },
-    };
-    const zd = daysByZone[zone] || daysByZone[5];
-    const options: ShippingOption[] = [];
-
-    if (weightG <= 2000) {
-      const eLightYen = getELightRate(weightG, zone);
-      if (eLightYen) {
-        options.push({
-          carrier: 'Japan Post Air Packet (国際エアパケット)',
-          basePrice: Math.round(fxConvert(eLightYen, currency)),
-          ratePerKg: 0,
-          currency,
-          daysEstimate: zd.light,
-        });
-      }
-    } else {
-      const airYen = getAirParcelRate(weightG, zone);
-      if (airYen) {
-        options.push({
-          carrier: 'Japan Post Kozutsumi Air (国際小包航空便)',
-          basePrice: Math.round(fxConvert(airYen, currency)),
-          ratePerKg: 0,
-          currency,
-          daysEstimate: zd.air,
-        });
-      }
-    }
-
-    const emsYen = getEmsRate(weightG, zone);
-    if (emsYen) {
-      options.push({
-        carrier: 'Japan Post EMS · via DHL',
-        basePrice: Math.round(fxConvert(emsYen, currency)),
-        ratePerKg: 0,
-        currency,
-        daysEstimate: zd.ems,
-      });
-    }
-
-    return options;
-  };
 
   // Atraso da resposta: hoje é 100% lógica local instantânea (sem chamada de IA
   // real desde que qwenEnabled()===false), então o atraso é só ritmo de UX, não
@@ -604,12 +412,6 @@ const KimiClawAssistant: React.FC = () => {
     return askQwen(history, catalog, locale);
   };
 
-  // Calcula o peso total de um produto para uma variante/tamanho específico
-  const getProductWeight = (product: Product, size: string): number => {
-    if (product.weightGrams) return productPackedWeightG(product);
-    const rawWeight = WEIGHT_BY_CATEGORY[product.category] || DEFAULT_WEIGHT;
-    return packedWeightG(size === 'large' ? rawWeight.large : rawWeight.small);
-  };
 
   const handleCommandExecution = async (text: string) => {
     const query = text.toLowerCase().trim();
@@ -1418,7 +1220,7 @@ const KimiClawAssistant: React.FC = () => {
     void (agent ? runCommand(skillText) : runCommand(searchKey, { allowAgent: false }));
   };
 
-  const handleConsentAction = async (accept: boolean, order?: any) => {
+  const handleConsentAction = async (accept: boolean, order?: OrderRef) => {
     // Marca este pedido como respondido → esconde os botões e evita repetição
     const orderKey = order?.orderNumber || order?.id;
     if (orderKey) {
@@ -1523,38 +1325,12 @@ const KimiClawAssistant: React.FC = () => {
           tabIndex={-1}
           className="w-[calc(100vw-2rem)] sm:w-[390px] max-w-[390px] h-[550px] max-h-[85vh] rounded-2xl border border-white/20 shadow-elevated bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl flex flex-col overflow-hidden animate-fade-up focus:outline-none"
         >
-          {/* HEADER */}
-          <div className="p-4 bg-gradient-to-r from-primary/10 via-accent/5 to-transparent border-b border-border flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white shadow-soft relative">
-                <Bot className="w-5 h-5 text-white" />
-                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border border-white" />
-              </div>
-              <div>
-                <h3 className="font-bold text-sm text-foreground flex items-center gap-1.5">
-                  {t('kimiclaw.title')}
-                  {isAdmin && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-700 dark:text-amber-400 font-bold border border-amber-500/30">
-                      ADMIN
-                    </span>
-                  )}
-                </h3>
-                <p className="text-[11px] text-muted-foreground">
-                  {isAdmin
-                    ? (language === 'pt' ? 'Modo Admin — dashboard · pedidos · catálogo' : 'Admin Mode — dashboard · orders · catalog')
-                    : t('kimiclaw.subtitle')}
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setIsOpen(false)}
-              aria-label={t('kimiclaw.close')}
-              className="p-1.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
+          <KimiHeader
+            t={t}
+            isAdmin={isAdmin}
+            language={language}
+            setIsOpen={setIsOpen}
+          />
           {/* MESSAGES FEED */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
             {messages.map((msg) => (
@@ -1580,109 +1356,29 @@ const KimiClawAssistant: React.FC = () => {
                     )}
                   </div>
                   
-                  {/* CONSENT PROMPT ACTION BUTTONS (somem após responder ou se já inscrito) */}
-                  {msg.isConsentPrompt &&
-                    !user?.whatsappMarketing &&
-                    !respondedOrders.includes(msg.orderToShare?.orderNumber || msg.orderToShare?.id) && (
-                    <div className="flex gap-2 mt-1">
-                      <button
-                        onClick={() => handleConsentAction(true, msg.orderToShare)}
-                        className="text-[11px] font-bold bg-primary hover:bg-primary/95 text-white px-3 py-1.5 rounded-lg shadow-soft transition"
-                      >
-                        ✅ {language === 'pt' ? 'Sim, quero receber!' : 'Yes, subscribe me!'}
-                      </button>
-                      <button
-                        onClick={() => handleConsentAction(false, msg.orderToShare)}
-                        className="text-[11px] font-semibold bg-secondary hover:bg-secondary/80 text-foreground px-3 py-1.5 rounded-lg transition"
-                      >
-                        ❌ {language === 'pt' ? 'Não, obrigado' : 'No, thanks'}
-                      </button>
-                    </div>
-                  )}
-
-                  {/* PRODUCT SEARCH RESULTS */}
-                  {msg.products && msg.products.length > 0 && (
-                    <div className="flex flex-col gap-2 mt-2">
-                      {msg.products.map((product) => (
-                        <div key={product.id} className="bg-muted/40 border border-border rounded-lg p-2.5 hover:bg-muted/60 transition-colors">
-                          <div className="flex gap-2 items-center">
-                            <Link to={`/produto/${product.id}`} className="group flex flex-1 min-w-0 items-center gap-2">
-                              <img src={product.image} alt={productEnglishName(product)} className="w-12 h-12 rounded object-cover shrink-0" />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-[11px] font-semibold text-foreground truncate group-hover:text-primary transition-colors">{productEnglishName(product)}</p>
-                                <p className="text-[10px] text-muted-foreground">{product.category}</p>
-                                <p className="text-[11px] font-bold text-primary mt-1">
-                                  {formatPrice(fxConvert(effectiveYen(product, 'small'), getCurrencyByCountry(selectedCountry)), getCurrencyByCountry(selectedCountry))}
-                                </p>
-                              </div>
-                              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0 group-hover:text-primary group-hover:translate-x-0.5 transition" />
-                            </Link>
-                            <button
-                              onClick={() => {
-                                addToCart(product, 'small', 1);
-                                toast.success(language === 'pt' ? `Adicionado: ${productEnglishName(product)}` : `Added: ${productEnglishName(product)}`);
-                              }}
-                              className="flex-shrink-0 bg-primary hover:bg-primary/95 text-white p-1.5 rounded-lg transition-colors"
-                              title={t('kimiclaw.search.add_to_cart')}
-                            >
-                              <ShoppingCart className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* PRÓXIMOS PASSOS SUGERIDOS PELO AGENTE */}
-                  {msg.actions && msg.actions.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-1">
-                      {msg.actions.map((action) => (
-                        <button
-                          key={action}
-                          type="button"
-                          onClick={() => runAction(action)}
-                          className={`text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-colors ${
-                            action === 'finalizar_compra'
-                              ? 'bg-primary hover:bg-primary/90 text-white shadow-soft'
-                              : 'bg-secondary hover:bg-secondary/80 text-foreground border border-border'
-                          }`}
-                        >
-                          {ACTION_LABELS[action]?.[(['pt', 'en', 'ja'].includes(language) ? language : 'pt') as 'pt' | 'en' | 'ja'] ?? action}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* SHIPPING CALCULATION RESULTS */}
-                  {msg.shippingResults && msg.shippingResults.length > 0 && (
-                    <div className="flex flex-col gap-1.5 mt-2 text-[11px]">
-                      <table className="w-full border-collapse">
-                        <thead>
-                          <tr className="border-b border-border">
-                            <th className="text-left py-1 px-2 font-bold text-foreground text-[10px]">{t('kimiclaw.shipping.carrier')}</th>
-                            <th className="text-right py-1 px-2 font-bold text-foreground text-[10px]">{t('kimiclaw.shipping.price')}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {msg.shippingResults.map((option, idx) => (
-                            <tr key={idx} className="border-b border-border/50 hover:bg-muted/40 transition-colors">
-                              <td className="py-2 px-2 text-left text-foreground">
-                                <div className="font-semibold">{option.carrier}</div>
-                                {option.daysEstimate && (
-                                  <div className="text-[10px] text-muted-foreground">~{option.daysEstimate} dias</div>
-                                )}
-                              </td>
-                              <td className="py-2 px-2 text-right">
-                                <div className="font-bold text-primary">
-                                  {formatPrice(option.basePrice, option.currency)}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                  <KimiConsentActions
+                    msg={msg}
+                    user={user}
+                    respondedOrders={respondedOrders}
+                    handleConsentAction={handleConsentAction}
+                    language={language}
+                  />
+                  <KimiProductResults
+                    msg={msg}
+                    selectedCountry={selectedCountry}
+                    addToCart={addToCart}
+                    language={language}
+                    t={t}
+                  />
+                  <KimiNextSteps
+                    msg={msg}
+                    runAction={runAction}
+                    language={language}
+                  />
+                  <KimiShippingResults
+                    msg={msg}
+                    t={t}
+                  />
                 </div>
               </div>
             ))}
@@ -1714,117 +1410,20 @@ const KimiClawAssistant: React.FC = () => {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* SKILL SUGGESTIONS */}
-          {!isTyping && (
-            <div className="px-4 py-2 border-t border-border bg-muted/30">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                <Command className="w-3 h-3" />
-                {isAdmin
-                  ? (language === 'pt' ? '⚡ Modo Admin' : '⚡ Admin Mode')
-                  : (language === 'pt' ? 'Habilidades Rápidas' : 'Quick Agent Skills')}
-              </p>
-              <div className="flex flex-wrap gap-1.5 max-h-[85px] overflow-y-auto scrollbar-hide py-0.5">
-                <button
-                  onClick={() => handleSuggestionClick(t('kimiclaw.skill.search_products'), 'buscar produtos')}
-                  className="text-[11px] bg-primary/10 hover:bg-primary/20 border border-primary/20 rounded-full px-2.5 py-1 text-primary-dark dark:text-primary font-bold flex items-center gap-1 transition duration-200"
-                >
-                  🔍 {language === 'pt' ? 'Buscar Produtos' : 'Search Products'}
-                </button>
-                {isAdmin ? (
-                  <>
-                    <button
-                      onClick={() => handleSuggestionClick('Qual o faturamento desse mês?', 'faturamento', { agent: true })}
-                      className="text-[11px] bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 rounded-full px-2.5 py-1 text-green-700 dark:text-green-400 font-bold flex items-center gap-1 transition duration-200"
-                    >
-                      📊 {language === 'pt' ? 'Faturamento' : 'Revenue'}
-                    </button>
-                    <button
-                      onClick={() => handleSuggestionClick('Calcular frete do biore para Brasil', 'frete biore brasil', { agent: true })}
-                      className="text-[11px] bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-full px-2.5 py-1 text-amber-700 dark:text-amber-400 font-bold flex items-center gap-1 transition duration-200"
-                    >
-                      ⚖️ {language === 'pt' ? 'Frete por Produto' : 'Product Shipping'}
-                    </button>
-                    <button
-                      onClick={() => handleSuggestionClick('Mostrar os produtos ocultos', 'mostrar produtos ocultos', { agent: true })}
-                      className="text-[11px] bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-full px-2.5 py-1 text-amber-700 dark:text-amber-400 font-medium transition duration-200"
-                    >
-                      👁️ {language === 'pt' ? 'Ver Catálogo Completo' : 'Full Catalog'}
-                    </button>
-                    <button
-                      onClick={() => handleSuggestionClick('Quais produtos têm a menor margem? Mostre custo e margem.', 'margem lucro produto', { agent: true })}
-                      className="text-[11px] bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-full px-2.5 py-1 text-amber-700 dark:text-amber-400 font-medium transition duration-200"
-                    >
-                      📊 {language === 'pt' ? 'Margem/Custo' : 'Margin/Cost'}
-                    </button>
-                    <button
-                      onClick={() => handleSuggestionClick(t('kimiclaw.skill.calc_shipping'), 'calcular frete')}
-                      className="text-[11px] bg-card hover:bg-primary/10 border border-border hover:border-primary/30 rounded-full px-2.5 py-1 text-foreground transition duration-200"
-                    >
-                      📦 {language === 'pt' ? 'Frete Manual' : 'Manual Shipping'}
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => handleSuggestionClick(t('kimiclaw.skill.calc_shipping'), 'calcular frete')}
-                      className="text-[11px] bg-primary/10 hover:bg-primary/20 border border-primary/20 rounded-full px-2.5 py-1 text-primary-dark dark:text-primary font-bold flex items-center gap-1 transition duration-200"
-                    >
-                      📦 {language === 'pt' ? 'Calcular Frete' : 'Calc. Shipping'}
-                    </button>
-                    <button
-                      onClick={() => handleSuggestionClick(t('kimiclaw.skill.apply_coupon'), 'cupom')}
-                      className="text-[11px] bg-card hover:bg-primary/10 border border-border hover:border-primary/30 rounded-full px-2.5 py-1 text-foreground transition duration-200"
-                    >
-                      {t('kimiclaw.skill.apply_coupon')}
-                    </button>
-                    <button
-                      onClick={() => handleSuggestionClick(language === 'pt' ? 'Como funciona o programa de afiliados? Quanto eu ganho?' : language === 'ja' ? 'アフィリエイトプログラムの仕組みと報酬を教えてください' : 'How does the affiliate program work? How much do I earn?', 'programa de afiliados', { agent: true })}
-                      className="text-[11px] bg-card hover:bg-primary/10 border border-border hover:border-primary/30 rounded-full px-2.5 py-1 text-foreground transition duration-200"
-                    >
-                      🤝 {language === 'pt' ? 'Afiliados' : language === 'ja' ? 'パートナー' : 'Affiliates'}
-                    </button>
-                    <button
-                      onClick={() => handleSuggestionClick('📱 Receber novidades no WhatsApp', 'enviar whatsapp')}
-                      className="text-[11px] bg-card hover:bg-primary/10 border border-border hover:border-primary/30 rounded-full px-2.5 py-1 text-foreground flex items-center gap-1 transition duration-200"
-                    >
-                      <Smartphone className="w-3 h-3" />
-                      {language === 'pt' ? 'WhatsApp' : 'WhatsApp'}
-                    </button>
-                  </>
-                )}
-                <button
-                  onClick={() => handleSuggestionClick(t('kimiclaw.skill.clear_cart'), 'limpar carrinho')}
-                  className="text-[11px] bg-card hover:bg-destructive/10 border border-border hover:border-destructive/30 rounded-full px-2.5 py-1 text-destructive font-medium transition duration-200"
-                >
-                  {t('kimiclaw.skill.clear_cart')}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* INPUT FORM */}
-          <form onSubmit={handleSendMessage} className="p-3 bg-card border-t border-border flex items-center gap-2">
-            <div className="relative flex-1">
-              <input
-                type="text"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                placeholder={t('kimiclaw.input_placeholder')}
-                disabled={isTyping}
-                className="w-full text-xs rounded-lg border border-input bg-background px-3 py-2.5 pr-8 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50"
-              />
-              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground flex items-center gap-1 select-none pointer-events-none">
-                <CornerDownLeft className="w-3.5 h-3.5 opacity-50" />
-              </div>
-            </div>
-            <button
-              type="submit"
-              disabled={isTyping || !inputValue.trim()}
-              className="p-2.5 rounded-lg bg-primary hover:bg-primary/95 text-white disabled:bg-muted disabled:text-muted-foreground transition-colors shrink-0"
-            >
-              <Send className="w-4 h-4" />
-            </button>
-          </form>
+          <KimiSkillSuggestions
+            isTyping={isTyping}
+            isAdmin={isAdmin}
+            language={language}
+            handleSuggestionClick={handleSuggestionClick}
+            t={t}
+          />
+          <KimiInputForm
+            handleSendMessage={handleSendMessage}
+            inputValue={inputValue}
+            setInputValue={setInputValue}
+            t={t}
+            isTyping={isTyping}
+          />
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-// ALTO 3 do AUDITORIA.md, parte que dependia de decisão de negócio: o guarda
+// ALTO 3 do docs/AUDITORIA.md, parte que dependia de decisão de negócio: o guarda
 // "cupom 1× por cliente" era ancorado em e-mail, que o convidado troca de
 // graça. A decisão foi trancar por CPF no Brasil e deixar como está fora dele.
 //

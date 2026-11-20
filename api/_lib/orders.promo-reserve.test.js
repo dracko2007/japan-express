@@ -5,7 +5,7 @@
 //
 // O teste central é o primeiro: um pedido já reservou a última unidade, e um
 // segundo checkout vê o saldo zerado DENTRO da transação, recusando-o.
-// Regressão do resto do CRÍTICO 3 do AUDITORIA.md: sem a trava transacional,
+// Regressão do resto do CRÍTICO 3 do docs/AUDITORIA.md: sem a trava transacional,
 // ambos passam na cotação (lida fora de transação) e chegam à criação.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 

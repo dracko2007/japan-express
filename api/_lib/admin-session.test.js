@@ -128,7 +128,7 @@ describe('admin-session endpoint (sub-admin auth only)', () => {
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
-  // Regressão do ALTO 4 do AUDITORIA.md. Antes, um doc `admins/{username}` com
+  // Regressão do ALTO 4 do docs/AUDITORIA.md. Antes, um doc `admins/{username}` com
   // o campo `password` em CLARO era aceito no login e migrado para o Firebase
   // Auth. Isso obrigava o servidor a saber ler senha em claro, e qualquer dump
   // (ou restauração de backup antigo) do Firestore entregava o painel.

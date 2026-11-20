@@ -206,7 +206,7 @@ describe('payment fulfillment transaction', () => {
   });
 });
 
-// Regressão do ALTO 1 do AUDITORIA.md: o pedido era cobrado, o `fulfillOrder`
+// Regressão do ALTO 1 do docs/AUDITORIA.md: o pedido era cobrado, o `fulfillOrder`
 // recusava, e o estado virava `payment_review` sem avisar ninguém e sem deixar
 // registrado o que estornar. O cliente descobria esperando; a loja, no
 // chargeback.
@@ -299,7 +299,7 @@ describe('pedido pago que não pôde ser separado', () => {
   });
 });
 
-// Regressão do MEDIO 3 do AUDITORIA.md: a âncora do limite de promoção era só o
+// Regressão do MEDIO 3 do docs/AUDITORIA.md: a âncora do limite de promoção era só o
 // CPF, que a aduana brasileira exige mas o checkout não. Quem compra de fora do
 // Brasil não preenche, então `cpf_index` e `promo_usage` nunca eram gravados
 // nem consultados para esse cliente — a mesma conta repetia a promoção quantas
@@ -376,7 +376,7 @@ describe('limite de promoção sem CPF', () => {
   });
 });
 
-// ALTO 3 do AUDITORIA.md, parte de decisão de negócio: o guarda "cupom 1× por
+// ALTO 3 do docs/AUDITORIA.md, parte de decisão de negócio: o guarda "cupom 1× por
 // cliente" só olhava e-mail, e convidado troca de e-mail de graça. A decisão
 // foi trancar por CPF — que a aduana já exige no Brasil e agora o servidor
 // também (`orders.js` recusa `cpf_required`). Fora do Brasil não há documento,

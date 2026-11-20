@@ -1,13 +1,11 @@
 import { safeStorage } from '@/utils/storage';
-import { fmtOrderMoney, fmtPair, itemPhoto, orderTotalYen, orderYenView, yen } from '@/utils/adminOrderMoney';
 import React, { Suspense, lazy, useCallback, useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Package, Printer, ShoppingBag, User, MapPin, Phone, Mail, Calendar, TestTube, Tag, Truck, CheckCircle, XCircle, Trash2, BarChart3, Users, PackagePlus, Video, Megaphone, Clapperboard, Building2, Sparkles, ShieldCheck, Calculator, CloudUpload, FileText, Handshake, Flag, TrendingDown, MessageCircle, Trophy, Landmark } from 'lucide-react';
+import { Package, Printer, TestTube, Tag, BarChart3, Users, PackagePlus, Video, Megaphone, Clapperboard, Building2, Sparkles, ShieldCheck, Calculator, CloudUpload, Handshake, Flag, TrendingDown, MessageCircle, Trophy, Landmark } from 'lucide-react';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/context/UserContext';
 import { emailService } from '@/services/emailService';
-import { emailServiceSimple } from '@/services/emailServiceSimple';
 import { whatsappServiceSimple } from '@/services/whatsappServiceSimple';
 import { waServer } from '@/services/waServerService';
 import { useToast } from '@/hooks/use-toast';
@@ -23,9 +21,14 @@ import { ADMIN_EMAIL } from '@/config/admin';
 import { auth } from '@/config/firebase';
 import { affiliateService } from '@/services/affiliateService';
 import { trackingUrlFor } from '@/utils/trackingUrl';
-import type { Order, OrderItem } from '@/types';
-import { formatPrice } from '@/utils/currency';
-import { localCarrierLabel } from '../../shared/local-stock.js';
+import type { Order } from '@/types';
+import { isAdminTab, type AdminTab, type AdminTabItem } from '@/components/admin/adminTabs';
+import TabLoading from '@/components/admin/TabLoading';
+import AdminOrdersList from '@/components/admin/AdminOrdersList';
+import AdminOrderStats from '@/components/admin/AdminOrderStats';
+import AdminNotificationTest from '@/components/admin/AdminNotificationTest';
+import AdminMobileNav from '@/components/admin/AdminMobileNav';
+import AdminSidebar from '@/components/admin/AdminSidebar';
 
 // Cada aba (e os modais dos pedidos) só baixa quando é aberta: antes as ~30
 // telas vinham juntas num pacote de ~940 KB, pesado para abrir no celular.
@@ -38,19 +41,6 @@ const HomeContentManager = lazy(() => import('@/components/admin/HomeContentMana
 const VlogManager = lazy(() => import('@/components/admin/VlogManager'));
 const CustomRequestManager = lazy(() => import('@/components/admin/CustomRequestManager'));
 const B2BRequestManager = lazy(() => import('@/components/admin/B2BRequestManager'));
-/** Pedido que sai do estoque que já está no país do cliente (empresa parceira), não do Japão. */
-const isLocalOrder = (order: Order): boolean => order.fulfillment === 'local' && Boolean(order.shipFrom);
-/** Um pedido, dois envios: os itens marcados `local` saem do país do cliente, os outros do Japão. */
-const isMixedOrder = (order: Order): boolean => order.fulfillment === 'mixed' && Boolean(order.shipFrom);
-const carrierText = (order: Order): string =>
-  (isLocalOrder(order) ? localCarrierLabel(order.shipFrom) : order.shippingCarrier || '');
-/** Frete nacional como foi cobrado, na moeda do pedido; null em pedido do Japão (frete em ¥). */
-const localShippingText = (order: Order): string | null => {
-  if (!(isLocalOrder(order) || isMixedOrder(order)) || order.priceBreakdown?.shipping == null) return null;
-  const amount = Number(order.priceBreakdown.shipping);
-  return amount > 0 ? formatPrice(amount, order.currency || 'JPY', true) : 'Grátis';
-};
-
 const AdminAccessManager = lazy(() => import('@/components/admin/AdminAccessManager'));
 const CN23Modal = lazy(() => import('@/components/admin/CN23Modal'));
 const ImageMigration = lazy(() => import('@/components/admin/ImageMigration'));
@@ -78,39 +68,7 @@ const devLog = isDev ? console.log.bind(console) : () => {};
 const devWarn = isDev ? console.warn.bind(console) : () => {};
 const devError = isDev ? console.error.bind(console) : () => {};
 
-function escapeHtml(value: unknown): string {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
 
-
-const ADMIN_TABS = [
-  'orders', 'coupons', 'dashboard', 'customers', 'products',
-  'calculator', 'migration', 'promotion', 'negotiations', 'marketing', 'employees', 'coupon-usage', 'fraud',
-  'thermal-printer', 'whatsapp', 'review-moderation', 'margin-audit', 'visitors', 'finance-detail', 'sandbox',
-  'affiliates', 'requests', 'b2b', 'videos', 'home', 'vlog', 'sorteio', 'admins',
-] as const;
-type AdminTab = (typeof ADMIN_TABS)[number];
-const isAdminTab = (value: string | null): value is AdminTab => ADMIN_TABS.includes(value as AdminTab);
-
-/** Enquanto o código da aba baixa (só na primeira abertura dela). */
-const TabLoading: React.FC = () => (
-  <div className="flex items-center justify-center py-16 text-sm text-muted-foreground" role="status">
-    <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" aria-hidden />
-    Carregando…
-  </div>
-);
-
-interface AdminTabItem {
-  id: AdminTab;
-  label: string;
-  icon: React.FC<{ className?: string }>;
-  badge?: number;
-}
 
 const Admin: React.FC = () => {
   const navigate = useNavigate();
@@ -543,252 +501,6 @@ _This is an automated test message_
     }
   };
 
-  const printOrder = (order: Order) => {
-    const printWindow = window.open('', '_blank', 'noopener,noreferrer');
-    if (!printWindow) return;
-
-    const statusLabel: Record<string, string> = {
-      pending: '⏳ Pendente',
-      processing: '✅ Pagamento Confirmado',
-      packing: '📦 Preparando Pacote',
-      shipped: '🚚 Enviado',
-      delivered: '🎉 Entregue',
-      cancelled: '❌ Cancelado',
-    };
-
-    const paymentLabel: Record<string, string> = {
-      pix: '📱 PIX',
-      card: '💳 Cartão de Crédito',
-      boleto: '📄 Boleto Bancário',
-      wise: '💸 Wise (Transferência)',
-      paypal: '🅿️ PayPal',
-      yucho: '🏦 Banco Yucho',
-    };
-
-    const itemsSubtotal = order.items.reduce((s: number, i: OrderItem) => s + i.price * i.quantity, 0);
-    const discount = order.couponDiscount || (itemsSubtotal > order.totalPrice ? itemsSubtotal - order.totalPrice : 0);
-    const shippingCost = order.shipping?.cost ?? null;
-    const grandTotal = order.totalPrice ?? order.total ?? 0;
-    const grandTotalYen = orderTotalYen(order);
-    const yenView = orderYenView(order);
-
-    const itemsHtml = order.items.map((item: OrderItem) => `
-      <tr>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;">${itemPhoto(item) ? `<img src="${escapeHtml(itemPhoto(item) as string)}" width="40" height="40" alt="" style="vertical-align:middle;margin-right:8px;border-radius:6px;object-fit:cover;border:1px solid #eee">` : ''}${isMixedOrder(order) && item.local ? '📍 ' : ''}${escapeHtml(item.productName || item.name)}${item.size ? ` <span style="color:#888;font-size:12px;">(${escapeHtml(item.size)})</span>` : ''}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center;">${Number(item.quantity) || 0}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${yenView ? yenView.itemValue(item) : fmtOrderMoney(Number(item.price) * Number(item.quantity), order.currency)}</td>
-      </tr>
-    `).join('');
-    const html = `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8"/>
-  <title>Pedido ${escapeHtml(order.orderNumber || 'N/A')}</title>
-  <style>
-    body { font-family: Arial, sans-serif; font-size: 14px; color: #111; background: #fff; padding: 24px; }
-    .no-print { margin-bottom: 16px; }
-    @media print { .no-print { display: none; } body { padding: 0; } }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #e4003a; padding-bottom: 14px; margin-bottom: 18px; }
-    .logo { font-size: 22px; font-weight: 900; color: #e4003a; }
-    .logo span { color: #111; }
-    .order-id { font-size: 18px; font-weight: bold; }
-    .order-date { font-size: 12px; color: #666; margin-top: 4px; }
-    .status-badge { display: inline-block; background: #fef3c7; color: #92400e; font-weight: bold; font-size: 12px; padding: 3px 10px; border-radius: 20px; margin-top: 6px; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-    .section { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; }
-    .section h3 { font-size: 13px; font-weight: 700; text-transform: uppercase; color: #555; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 6px; }
-    .section p { font-size: 13px; margin: 4px 0; line-height: 1.5; }
-    .section p.label { color: #888; font-size: 11px; margin-bottom: 0; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-    th { background: #f9fafb; text-align: left; padding: 6px 8px; font-size: 12px; color: #666; }
-    th:last-child, td:last-child { text-align: right; }
-    th:nth-child(2), td:nth-child(2) { text-align: center; }
-    .totals { margin-top: 4px; }
-    .totals tr td { padding: 4px 8px; font-size: 13px; }
-    .totals tr.grand td { font-weight: bold; font-size: 15px; border-top: 2px solid #111; padding-top: 8px; }
-    .totals tr.discount td { color: #16a34a; }
-    .footer { margin-top: 24px; border-top: 1px dashed #ccc; padding-top: 14px; text-align: center; font-size: 11px; color: #aaa; }
-  </style>
-</head>
-<body>
-  <div class="no-print">
-    <button onclick="window.print()" style="padding:8px 20px;font-size:14px;cursor:pointer;background:#e4003a;color:#fff;border:none;border-radius:6px;margin-right:8px;">🖨️ Imprimir</button>
-    <button onclick="window.close()" style="padding:8px 16px;font-size:14px;cursor:pointer;border:1px solid #ccc;border-radius:6px;">✕ Fechar</button>
-  </div>
-
-  <div class="header">
-    <div>
-      <div class="logo">🌸 Japan <span>Express</span></div>
-      <div style="font-size:11px;color:#888;margin-top:2px;">Importação Direta Japão-Brasil</div>
-    </div>
-    <div style="text-align:right;">
-      <div class="order-id">Pedido: ${escapeHtml(order.orderNumber || 'N/A')}</div>
-      <div class="order-date">${escapeHtml(new Date(order.orderDate || order.date || Date.now()).toLocaleString('pt-BR'))}</div>
-      <div class="status-badge">${escapeHtml(statusLabel[order.status] || order.status || 'N/A')}</div>
-    </div>
-  </div>
-  ${isMixedOrder(order) ? `<div style="margin:0 0 14px;padding:10px 14px;border:2px solid #059669;background:#ecfdf5;color:#065f46;font-weight:800;border-radius:8px;">📍 DOIS ENVIOS — itens marcados com 📍 saem do estoque do ${escapeHtml(String(order.shipFrom))} (frete nacional); os demais saem do Japão.</div>` : ''}
-  ${isLocalOrder(order) ? `<div style="margin:0 0 14px;padding:10px 14px;border:2px solid #059669;background:#ecfdf5;color:#065f46;font-weight:800;border-radius:8px;">📍 ENVIAR DO ${escapeHtml(String(order.shipFrom).toUpperCase())} — estoque local, frete nacional. Não sai do Japão.</div>` : ''}
-  <div class="grid">
-    <div class="section">
-      <h3>👤 Cliente</h3>
-      <p><strong>${escapeHtml(order.shippingAddress?.name || order.customerName || 'N/A')}</strong></p>
-      <p class="label">E-mail</p>
-      <p>${escapeHtml(order.customerEmail || 'N/A')}</p>
-      <p class="label">Telefone</p>
-      <p>${escapeHtml(order.shippingAddress?.phone || order.phone || 'N/A')}</p>
-      ${order.cpf ? `<p class="label">CPF</p><p>${escapeHtml(order.cpf)}</p>` : ''}
-    </div>
-    <div class="section">
-      <h3>📍 Endereço de Entrega</h3>
-      <p>〒 ${escapeHtml(order.shippingAddress?.postalCode || 'N/A')}</p>
-      <p>${escapeHtml(`${order.shippingAddress?.prefecture || ''} ${order.shippingAddress?.city || ''}`)}</p>
-      <p>${escapeHtml(order.shippingAddress?.address || '')}</p>
-      ${order.shippingAddress?.building ? `<p>${escapeHtml(order.shippingAddress.building)}</p>` : ''}
-    </div>
-  </div>
-
-  <div class="section" style="margin-bottom:20px;">
-    <h3>📦 Itens do Pedido</h3>
-    <table>
-      <thead>
-        <tr>
-          <th>Produto</th>
-          <th>Qtd</th>
-          <th>Valor</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${itemsHtml}
-      </tbody>
-    </table>
-    <table class="totals">
-      <tr>
-        <td>Subtotal</td>
-        <td></td>
-        <td>${yenView ? yenView.subtotal : fmtOrderMoney(itemsSubtotal, order.currency)}</td>
-      </tr>
-      ${(yenView ? yenView.discount !== null : discount > 0) ? `<tr class="discount"><td>Cupom ${order.couponCode ? `(${escapeHtml(order.couponCode)})` : ''}</td><td></td><td>${yenView && yenView.discount ? yenView.discount : `-${fmtOrderMoney(discount, order.currency)}`}</td></tr>` : ''}
-      <tr>
-        <td>Frete ${order.shippingCarrier ? `(${escapeHtml(carrierText(order))})` : ''}</td>
-        <td></td>
-        <td>${localShippingText(order) ? escapeHtml(localShippingText(order) as string) : yenView ? yenView.shipping : shippingCost != null ? (shippingCost === 0 ? 'Grátis' : `¥ ${Math.round(shippingCost).toLocaleString('en-US')}`) : 'N/A'}</td>
-      </tr>
-      ${yenView && yenView.psFee ? `<tr><td>Taxa PS (Personal Shopper)</td><td></td><td>${yenView.psFee}</td></tr>` : ''}
-      ${(order.federalTax > 0 || order.icmsTax > 0 || order.taxAmount > 0) ? `<tr><td style="color:#888;font-size:12px;">Impostos (II + ICMS)</td><td></td><td style="color:#888;font-size:12px;">R$ ${Number(order.federalTax && order.icmsTax ? (order.federalTax + order.icmsTax) : order.taxAmount || 0).toFixed(2)}</td></tr>` : ''}
-      <tr class="grand">
-        <td>Total Geral</td>
-        <td></td>
-        <td style="color:#e4003a;">${yenView ? yenView.total : grandTotalYen && order.currency !== 'JPY' ? fmtPair(grandTotalYen, grandTotal, order.currency) : fmtOrderMoney(grandTotal, order.currency)}</td>
-      </tr>
-    </table>
-  </div>
-
-  <div class="section">
-    <h3>💳 Pagamento</h3>
-    <p>${escapeHtml(paymentLabel[order.paymentMethod] || order.paymentMethod || 'N/A')}</p>
-    <p style="margin-top:6px;">Status: <strong>${escapeHtml(statusLabel[order.status] || order.status || 'N/A')}</strong></p>
-  </div>
-
-  <div class="footer">
-    Japan Express · www.japanexpress-store.com · Impresso em ${new Date().toLocaleString('pt-BR')}
-  </div>
-</body>
-</html>`;
-
-    printWindow.document.write(html);
-    printWindow.document.close();
-  };
-
-  const printShippingLabel = (order: Order) => {
-    const printWindow = window.open('', '_blank', 'noopener,noreferrer');
-    if (!printWindow) return;
-
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Etiqueta de Envio - ${escapeHtml(order.orderNumber || 'N/A')}</title>
-        <style>
-          body { font-family: Arial, sans-serif; padding: 20px; }
-          .label { border: 3px solid #000; padding: 20px; max-width: 800px; margin: 0 auto; }
-          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 15px; }
-          .section { margin-bottom: 20px; }
-          .row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
-          .box { border: 2px dashed #666; padding: 15px; }
-          h1 { margin: 0 0 5px 0; font-size: 28px; }
-          h2 { margin: 0; font-size: 14px; color: #666; }
-          h3 { margin: 0 0 10px 0; font-size: 16px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
-          p { margin: 5px 0; font-size: 14px; }
-          .strong { font-weight: bold; }
-          @media print {
-            body { padding: 0; }
-            .no-print { display: none; }
-          }
-        </style>
-      </head>
-      <body>
-        <button class="no-print" onclick="window.print()" style="padding: 10px 20px; margin-bottom: 20px; font-size: 16px; cursor: pointer;">
-          🖨️ Imprimir Etiqueta
-        </button>
-        
-        <div class="label">
-          <div class="header">
-            <h1>🌸 JAPAN EXPRESS</h1>
-            <h2>Importação Direta Japão-Brasil</h2>
-            <p class="strong">Pedido: ${escapeHtml(order.orderNumber || 'N/A')}</p>
-            <p>Data: ${escapeHtml(new Date(order.orderDate || order.date || Date.now()).toLocaleDateString('pt-BR'))}</p>
-          </div>
-
-          <div class="section">
-            <h3>📦 PRODUTOS</h3>
-            ${order.items.map((item: OrderItem) => `
-              <p>• ${escapeHtml(item.productName || item.name)} (${escapeHtml(item.size || '')}) x${Number(item.quantity) || 0} - R$${(Number(item.price) * Number(item.quantity)).toLocaleString()}</p>
-            `).join('')}
-            <p class="strong" style="margin-top: 10px;">Total: R$${Number(order.totalPrice ?? order.totalAmount ?? 0).toLocaleString()}</p>
-          </div>
-
-          <div class="row">
-            <div class="box">
-              <h3>📤 REMETENTE (ご依頼主)</h3>
-              <p class="strong">${escapeHtml(COMPANY_PROFILE.contactName)}</p>
-              <p>〒${escapeHtml(COMPANY_PROFILE.fulfillmentOrigin.postalCode)}</p>
-              <p>${escapeHtml(COMPANY_PROFILE.fulfillmentOrigin.formattedJa.replace(`〒${COMPANY_PROFILE.fulfillmentOrigin.postalCode} `, ''))}</p>
-              <p>📞 ${escapeHtml(COMPANY_PROFILE.whatsapp.domestic)}</p>
-            </div>
-            
-            <div class="box">
-              <h3>📥 DESTINATÁRIO (Aduana Brasil)</h3>
-              <p class="strong">${escapeHtml(order.shippingAddress?.name || order.name || order.customerName || 'N/A')}</p>
-              <p>CPF: ${escapeHtml(order.cpf || 'N/A')}</p>
-              <p>CEP: ${escapeHtml(order.shippingAddress?.postalCode || order.postalCode || 'N/A')}</p>
-              <p>${escapeHtml(`${order.shippingAddress?.prefecture || order.prefecture || ''} - ${order.shippingAddress?.city || order.city || ''}`)}</p>
-              <p>${escapeHtml(order.shippingAddress?.address || order.address || '')}</p>
-              ${(order.shippingAddress?.building || order.building) ? `<p>Complemento: ${escapeHtml(order.shippingAddress?.building || order.building)}</p>` : ''}
-              <p>📞 ${escapeHtml(order.shippingAddress?.phone || order.phone || 'N/A')}</p>
-            </div>
-          </div>
-
-          <div class="section" style="margin-top: 20px;">
-            <h3>💳 PAGAMENTO</h3>
-            <p>${order.paymentMethod === 'pix' ? '📱 PIX' : order.paymentMethod === 'card' ? '💳 Cartão de Crédito' : '📄 Boleto Bancário'}</p>
-            <p class="strong">Status: ${order.status === 'pending' || order.status === 'Pendente' ? '⏳ Pendente' : '✅ Confirmado / Pago'}</p>
-          </div>
-        </div>
-
-        <div class="no-print" style="text-align: center; margin-top: 20px;">
-          <button onclick="window.close()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">
-            ❌ Fechar
-          </button>
-        </div>
-      </body>
-      </html>
-    `;
-
-    printWindow.document.write(html);
-    printWindow.document.close();
-  };
-
   // Abas agrupadas (menu lateral) — orientado a dados
   const tabGroups: { title: string; items: AdminTabItem[] }[] = [
     { title: 'Visão geral', items: [{ id: 'dashboard', label: 'Dashboard', icon: BarChart3 }] },
@@ -887,446 +599,52 @@ _This is an automated test message_
         <div className="container mx-auto px-4">
           <div className="max-w-7xl mx-auto lg:flex lg:gap-8 lg:items-start">
 
-            {/* MENU LATERAL (desktop) */}
-            <aside className="hidden lg:block lg:w-56 shrink-0 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:rounded-2xl">
-              <div className="bg-card rounded-2xl border border-border p-3 space-y-4">
-                {tabGroups.map((group) => (
-                  <div key={group.title}>
-                    <p className="px-3 mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">{group.title}</p>
-                    <div className="space-y-0.5">
-                      {group.items.map((item) => {
-                        const Icon = item.icon;
-                        const active = activeTab === item.id;
-                        return (
-                          <button
-                            key={item.id}
-                            onClick={() => setActiveTab(item.id)}
-                            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'}`}
-                          >
-                            <Icon className="w-4 h-4 shrink-0" />
-                            <span className="flex-1 text-left">{item.label}</span>
-                            {item.badge ? (
-                              <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
-                                {item.badge > 99 ? '99+' : item.badge}
-                              </span>
-                            ) : null}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </aside>
+            <AdminSidebar
+              tabGroups={tabGroups}
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+            />
 
             {/* COLUNA DE CONTEÚDO */}
             <div className="flex-1 min-w-0">
-              {/* Navegação mobile: seletor agrupado igual ao menu lateral
-                  (30 abas numa linha rolável não cabiam no celular). */}
-              <div className="lg:hidden mb-6">
-                <label htmlFor="admin-section" className="mb-1.5 block text-xs font-semibold text-muted-foreground">
-                  Seção do painel
-                </label>
-                <select
-                  id="admin-section"
-                  value={activeTab}
-                  onChange={(e) => setActiveTab(e.target.value as AdminTab)}
-                  className="h-11 w-full rounded-xl border border-border bg-card px-3 text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                >
-                  {tabGroups.map((group) => (
-                    <optgroup key={group.title} label={group.title}>
-                      {group.items.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.label}{item.badge ? ` (${item.badge > 99 ? '99+' : item.badge})` : ''}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </div>
-              <h2 className="hidden lg:block font-display text-2xl font-bold text-foreground mb-5">{activeLabel}</h2>
+              <AdminMobileNav
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                tabGroups={tabGroups}
+                activeLabel={activeLabel}
+              />
 
             {/* Content */}
             <Suspense fallback={<TabLoading />}>
             {activeTab === 'orders' ? (
               <>
             
-            {/* Test Button */}
-            <div className="mb-8 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950 dark:to-purple-950 rounded-2xl border-2 border-blue-200 dark:border-blue-800 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
-                    <TestTube className="w-5 h-5" />
-                    Testar Notificações
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Envie emails e WhatsApp de teste para verificar se as configurações estão funcionando
-                  </p>
-                </div>
-                <Button 
-                  onClick={testNotifications}
-                  disabled={isTesting}
-                  size="lg"
-                  className="ml-4"
-                >
-                  {isTesting ? '⏳ Testando...' : '🧪 Testar Agora'}
-                </Button>
-              </div>
-            </div>
+            <AdminNotificationTest
+              testNotifications={testNotifications}
+              isTesting={isTesting}
+            />
             
-            {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-card rounded-2xl border border-border p-6">
-                <div className="flex items-center gap-3 mb-2">
-                  <ShoppingBag className="w-6 h-6 text-primary" />
-                  <h3 className="font-semibold text-lg">Pedidos carregados</h3>
-                </div>
-                <p className="text-3xl font-bold">{allOrders.length}</p>
-              </div>
-              
-              <div className="bg-card rounded-2xl border border-border p-6">
-                <div className="flex items-center gap-3 mb-2">
-                  <Package className="w-6 h-6 text-yellow-600" />
-                  <h3 className="font-semibold text-lg">Pendentes carregados</h3>
-                </div>
-                <p className="text-3xl font-bold text-yellow-600">
-                  {pendingOrdersCount}
-                </p>
-              </div>
-              
-              <div className="bg-card rounded-2xl border border-border p-6">
-                <div className="flex items-center gap-3 mb-2">
-                  <Calendar className="w-6 h-6 text-green-600" />
-                  <h3 className="font-semibold text-lg">Hoje (carregados)</h3>
-                </div>
-                <p className="text-3xl font-bold text-green-600">
-                  {allOrders.filter(o => {
-                    const orderDate = new Date(o.orderDate).toDateString();
-                    const today = new Date().toDateString();
-                    return orderDate === today;
-                  }).length}
-                </p>
-              </div>
-            </div>
+            <AdminOrderStats
+              allOrders={allOrders}
+              pendingOrdersCount={pendingOrdersCount}
+            />
 
-            {/* Orders List */}
-            <div className="space-y-6">
-              <h2 className="font-display text-2xl font-bold text-foreground">
-                Pedidos Recentes
-              </h2>
-              
-              {ordersLoading ? (
-                <div className="bg-card rounded-2xl border border-border p-12 text-center flex flex-col items-center gap-4">
-                  <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-                  <p className="text-muted-foreground">Carregando pedidos...</p>
-                </div>
-              ) : allOrders.length === 0 ? (
-                <div className="bg-card rounded-2xl border border-border p-12 text-center">
-                  <Package className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">Nenhum pedido encontrado</p>
-                </div>
-              ) : (
-                allOrders.map((order, index) => (
-                  <div key={order.orderNumber || order.id} className="bg-card rounded-2xl border border-border p-6 hover:shadow-lg transition-shadow">
-                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <Package className="w-5 h-5 text-primary" />
-                          <h3 className="font-semibold text-lg">
-                            Pedido #{order.orderNumber || `ORD-${index + 1}`}
-                          </h3>
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(order.status || 'pending')}`}>
-                            {getStatusLabel(order.status || 'pending')}
-                          </span>
-                          {isLocalOrder(order) && (
-                            <span className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-extrabold uppercase text-white">
-                              📍 Enviar do {order.shipFrom}
-                            </span>
-                          )}
-                          {isMixedOrder(order) && (
-                            <span className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-extrabold uppercase text-white">
-                              📍 2 envios: {order.shipFrom} + Japão
-                            </span>
-                          )}
-                        </div>
-                        {isMixedOrder(order) && (
-                          <p className="mb-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
-                            Um pagamento, dois envios: os itens marcados com 📍 saem do estoque do {order.shipFrom} (frete nacional); os demais saem do Japão.
-                          </p>
-                        )}
-                        {isLocalOrder(order) && (
-                          <p className="mb-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
-                            Este pedido NÃO sai do Japão: as unidades estão no estoque do {order.shipFrom} e seguem por frete nacional.
-                          </p>
-                        )}
-                        <p className="text-sm text-muted-foreground mb-1">
-                          <Calendar className="w-4 h-4 inline mr-1" />
-                          {new Date(order.orderDate).toLocaleString('pt-BR')}
-                        </p>
-                        <p className="text-sm text-muted-foreground font-semibold">
-                          💳 {order.paymentMethod === 'pix' ? 'PIX'
-                            : order.paymentMethod === 'wise' ? 'Wise'
-                            : order.paymentMethod === 'paypay' ? 'PayPay'
-                            : order.paymentMethod === 'yucho' ? 'Yucho'
-                            : order.paymentMethod === 'card' ? 'Cartão de Crédito'
-                            : order.paymentMethod === 'boleto' ? 'Boleto Bancário'
-                            : order.paymentMethod || 'N/A'}
-                        </p>
-                      </div>
-                      
-                      <div className="flex gap-2 flex-wrap justify-end">
-                        <Button
-                          onClick={() => setCn23Order(order)}
-                          variant="outline"
-                          className="gap-2 border-red-300 text-red-700 hover:bg-red-50"
-                        >
-                          <FileText className="w-4 h-4" />
-                          CN22/CN23
-                        </Button>
-                        <Button
-                          onClick={() => printOrder(order)}
-                          variant="outline"
-                          className="gap-2"
-                        >
-                          <Printer className="w-4 h-4" />
-                          Imprimir Pedido
-                        </Button>
-                        <Button
-                          onClick={() => printShippingLabel(order)}
-                          variant="outline"
-                          className="gap-2"
-                        >
-                          <Printer className="w-4 h-4" />
-                          Etiqueta
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4 border-t border-border">
-                      {/* Customer Info */}
-                      <div>
-                        <h4 className="font-semibold mb-3 flex items-center gap-2">
-                          <User className="w-4 h-4" />
-                          Cliente
-                        </h4>
-                        <div className="space-y-1 text-sm">
-                          <p className="font-medium">{order.shippingAddress?.name || order.customerName || 'N/A'}</p>
-                          <p className="text-muted-foreground flex items-center gap-2">
-                            <Mail className="w-4 h-4" />
-                            {order.customerEmail || 'N/A'}
-                          </p>
-                          <p className="text-muted-foreground flex items-center gap-2">
-                            <Phone className="w-4 h-4" />
-                            {order.shippingAddress?.phone || order.customerName || 'N/A'}
-                          </p>
-                          <p className="text-muted-foreground flex items-start gap-2 mt-2">
-                            <MapPin className="w-4 h-4 mt-0.5" />
-                            <span>
-                              〒{order.shippingAddress?.postalCode || 'N/A'}<br />
-                              {order.shippingAddress?.prefecture} {order.shippingAddress?.city}<br />
-                              {order.shippingAddress?.address}
-                              {order.shippingAddress?.building && <><br />{order.shippingAddress.building}</>}
-                            </span>
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Products */}
-                      <div>
-                        <h4 className="font-semibold mb-3 flex items-center gap-2">
-                          <ShoppingBag className="w-4 h-4" />
-                          Produtos
-                        </h4>
-                        <div className="space-y-2">
-                          {order.items.map((item: OrderItem, i: number) => (
-                            <div key={i} className="flex items-start gap-3 text-sm">
-                               {itemPhoto(item) ? (
-                                 <img src={itemPhoto(item) as string} alt={item.productName || item.name || 'Produto'} loading="lazy" className="h-12 w-12 shrink-0 rounded-md border border-border object-cover" />
-                               ) : (
-                                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground"><ShoppingBag className="h-4 w-4" /></div>
-                               )}
-                               <span className="flex-1">{isMixedOrder(order) && item.local ? '📍 ' : ''}{item.productName || item.name} ({item.size}) x{item.quantity}</span>
-                               <span className="font-semibold font-mono whitespace-nowrap">{orderYenView(order) ? orderYenView(order)!.itemValue(item) : fmtOrderMoney(item.price * item.quantity, order.currency)}</span>
-                            </div>
-                          ))}
-                          {(() => {
-                            const itemsSubtotal = order.items.reduce((sum: number, item: OrderItem) => sum + item.price * item.quantity, 0);
-                            // Detect coupon discount: saved field OR inferred from items sum vs totalPrice
-                            const discount = order.couponDiscount || (itemsSubtotal > order.totalPrice ? itemsSubtotal - order.totalPrice : 0);
-                            const shippingCost = order.shipping?.cost ?? null;
-                            // Igual ao site: valor na moeda do pedido e os ienes entre parênteses.
-                            const yv = orderYenView(order);
-                            return (
-                              <div className="pt-2 border-t border-border space-y-1">
-                                {/* Subtotal */}
-                                <div className="flex justify-between text-sm">
-                                  <span>Subtotal</span>
-                                  <span className="font-mono">{yv ? yv.subtotal : fmtOrderMoney(itemsSubtotal, order.currency)}</span>
-                                </div>
-                                
-                                {/* Coupon Discount */}
-                                {(yv ? yv.discount !== null : discount > 0) && (
-                                  <div className="flex justify-between text-sm text-green-600 font-bold">
-                                    <span className="flex items-center gap-1">
-                                      <Tag className="w-3 h-3" />
-                                      Cupom {order.couponCode && <span className="font-mono bg-green-100 px-1 rounded text-xs">{order.couponCode}</span>}
-                                    </span>
-                                    <span className="font-mono">{yv && yv.discount ? yv.discount : `-${fmtOrderMoney(discount, order.currency)}`}</span>
-                                  </div>
-                                )}
-                                
-                                {/* Shipping */}
-                                <div className="flex justify-between text-sm">
-                                  <span className="flex items-center gap-1">
-                                    <Truck className="w-3 h-3" />
-                                    Frete {order.shippingCarrier && <span className="text-muted-foreground text-xs">({carrierText(order)})</span>}
-                                  </span>
-                                  <span className="font-mono">{localShippingText(order) ?? (yv ? (yv.shipping === 'Grátis' ? <span className="text-green-600">Grátis</span> : yv.shipping) : shippingCost != null ? (shippingCost === 0 ? <span className="text-green-600">Grátis</span> : `¥ ${Math.round(shippingCost).toLocaleString('en-US')}`) : 'N/A')}</span>
-                                </div>
-
-                                {/* Taxa Personal Shopper (cobrada, ou isenta) */}
-                                {yv && yv.psFee && (
-                                  <div className="flex justify-between text-sm">
-                                    <span>Taxa PS (Personal Shopper)</span>
-                                    <span className={`font-mono ${yv.psFeeNote === 'waived' ? 'text-green-600 font-semibold' : ''}`}>{yv.psFee}</span>
-                                  </div>
-                                )}
-
-                                {/* Impostos */}
-                                {(order.federalTax > 0 || order.icmsTax > 0 || order.taxAmount > 0) && (
-                                  order.federalTax != null && order.icmsTax != null ? (
-                                    <>
-                                      <div className="flex justify-between text-xs text-muted-foreground">
-                                        <span>II Federal</span>
-                                        <span className="font-mono">R$ {Number(order.federalTax).toFixed(2)}</span>
-                                      </div>
-                                      <div className="flex justify-between text-xs text-muted-foreground">
-                                        <span>ICMS (17%)</span>
-                                        <span className="font-mono">R$ {Number(order.icmsTax).toFixed(2)}</span>
-                                      </div>
-                                    </>
-                                  ) : (
-                                    <div className="flex justify-between text-xs text-muted-foreground">
-                                      <span>Impostos Estimados (II + ICMS)</span>
-                                      <span className="font-mono">R$ {Number(order.taxAmount || 0).toFixed(2)}</span>
-                                    </div>
-                                  )
-                                )}
-                                
-                                {/* Total */}
-                                <div className="flex justify-between font-bold pt-1 border-t border-border text-base">
-                                  <span>Total Geral</span>
-                                  <span className="text-primary font-mono">
-                                    {yv
-                                      ? yv.total
-                                      : orderTotalYen(order) > 0 && order.currency !== 'JPY'
-                                        ? fmtPair(orderTotalYen(order), order.totalPrice ?? order.total ?? 0, order.currency)
-                                        : fmtOrderMoney(order.totalPrice ?? order.total ?? 0, order.currency)}
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="mt-6 pt-4 border-t border-border flex flex-wrap gap-2">
-                      {order.status === 'pending' && (
-                        <>
-                          <Button
-                            onClick={() => handleConfirmPayment(order.orderNumber)}
-                            size="sm"
-                            className="gap-2 bg-green-600 hover:bg-green-700 text-white"
-                          >
-                            <CheckCircle className="w-4 h-4" />
-                            ✅ Confirmar Pagamento Recebido
-                          </Button>
-                          <Button
-                            onClick={() => handleUpdateStatus(order.orderNumber, 'processing')}
-                            size="sm"
-                            variant="outline"
-                          >
-                            <Package className="w-4 h-4 mr-2" />
-                            Já Processando
-                          </Button>
-                        </>
-                      )}
-                      {(order.status === 'processing' || order.status === 'confirmed') && (
-                        <Button
-                          onClick={() => handleUpdateStatus(order.orderNumber, 'packing')}
-                          size="sm"
-                          className="gap-2 bg-orange-500 hover:bg-orange-600 text-white"
-                        >
-                          <Package className="w-4 h-4" />
-                          Preparando Pacote
-                        </Button>
-                      )}
-                      {order.status === 'packing' && (
-                        <Button
-                          onClick={() => {
-                            setSelectedOrder(order);
-                            setTrackingModalOpen(true);
-                          }}
-                          variant="outline"
-                          size="sm"
-                          className="gap-2"
-                        >
-                          <Truck className="w-4 h-4" />
-                          Marcar como Enviado
-                        </Button>
-                      )}
-                      {order.status === 'shipped' && (
-                        <>
-                          <Button
-                            onClick={() => handleUpdateStatus(order.orderNumber, 'delivered')}
-                            size="sm"
-                            className="gap-2 bg-green-600 hover:bg-green-700 text-white"
-                          >
-                            <CheckCircle className="w-4 h-4" />
-                            ✅ Pacote Recebido pelo Admin
-                          </Button>
-                        </>
-                      )}
-                      {order.status !== 'cancelled' && order.status !== 'delivered' && (
-                        <Button
-                          onClick={() => handleCancelOrder(order.orderNumber)}
-                          variant="outline"
-                          size="sm"
-                          className="gap-2 text-orange-600 hover:text-orange-700"
-                        >
-                          <XCircle className="w-4 h-4" />
-                          Cancelar
-                        </Button>
-                      )}
-                      <Button
-                        onClick={() => handleDeleteOrder(order.orderNumber)}
-                        variant="destructive"
-                        size="sm"
-                        className="gap-2 ml-auto"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        Excluir
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              )}
-
-              {allOrders.length > 0 && ordersHasMore && (
-                <div className="flex justify-center pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void loadOrders(true)}
-                    disabled={ordersLoadingMore}
-                  >
-                    {ordersLoadingMore ? 'Carregando...' : 'Carregar mais pedidos'}
-                  </Button>
-                </div>
-              )}
-            </div>
+            <AdminOrdersList
+              ordersLoading={ordersLoading}
+              allOrders={allOrders}
+              getStatusColor={getStatusColor}
+              getStatusLabel={getStatusLabel}
+              setCn23Order={setCn23Order}
+              handleConfirmPayment={handleConfirmPayment}
+              handleUpdateStatus={handleUpdateStatus}
+              setSelectedOrder={setSelectedOrder}
+              setTrackingModalOpen={setTrackingModalOpen}
+              handleCancelOrder={handleCancelOrder}
+              handleDeleteOrder={handleDeleteOrder}
+              ordersHasMore={ordersHasMore}
+              loadOrders={loadOrders}
+              ordersLoadingMore={ordersLoadingMore}
+            />
             </>
             ) : activeTab === 'coupons' ? (
               <CouponManager />

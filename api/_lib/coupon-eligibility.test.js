@@ -64,7 +64,7 @@ describe('coupon eligibility', () => {
     expect(publicCoupon('PRIVATE10', coupon)).not.toHaveProperty('targetEmails');
   });
 
-  // Regressão do ALTO 3 do AUDITORIA.md. O checkout aceita convidado
+  // Regressão do ALTO 3 do docs/AUDITORIA.md. O checkout aceita convidado
   // (`signInAnonymously`), e aí o e-mail vem do formulário, não do token.
   // Sem esta trava bastava digitar o endereço da vítima para levar o cupom
   // nominal dela — inclusive os 10/15/30% de recuperação de carrinho, que

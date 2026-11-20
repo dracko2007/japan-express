@@ -1,7 +1,12 @@
 import fs from 'fs';
 
 // Read the KimiClawAssistant source to verify features are present
-const source = fs.readFileSync('src/components/KimiClawAssistant.tsx', 'utf8');
+// O assistente foi dividido: o componente principal + src/components/kimiclaw/*.
+const kimiDir = 'src/components/kimiclaw';
+const source = [
+  'src/components/KimiClawAssistant.tsx',
+  ...fs.readdirSync(kimiDir).map((name) => `${kimiDir}/${name}`),
+].map((file) => fs.readFileSync(file, 'utf8')).join('\n');
 
 const checks = {
   'searchProducts function': source.includes('const searchProducts'),

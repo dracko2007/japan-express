@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PRAZO_RESERVA_MS, comReserva, pontosDisponiveis, pontosReservados, semReserva } from './points-hold.js';
 
-// Regressão do MEDIO 2 do AUDITORIA.md: o saldo era conferido fora de transação
+// Regressão do MEDIO 2 do docs/AUDITORIA.md: o saldo era conferido fora de transação
 // e só debitado no fulfillment, então dois checkouts simultâneos do mesmo
 // cliente passavam com o mesmo saldo e o segundo estourava depois de cobrado.
 
