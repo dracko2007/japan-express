@@ -29,6 +29,12 @@ export const useLanguage = () => {
 const ISO_TO_CONFIG: Record<string, import('@/data/worldCountries').CountryConfig> =
   Object.fromEntries(WORLD_COUNTRIES.map(c => [c.iso.toUpperCase(), c]));
 
+/** `?pais=br` → nome do país na loja ('Brasil'); código desconhecido ou ausente → null. */
+export function countryFromUrl(search: string): string | null {
+  const code = new URLSearchParams(search).get('pais')?.trim().toUpperCase();
+  return (code && ISO_TO_CONFIG[code]?.name) || null;
+}
+
 interface LanguageProviderProps { children: ReactNode; }
 
 export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) => {
@@ -38,6 +44,13 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
   });
 
   const [selectedCountry, setSelectedCountryState] = useState<CountryType>(() => {
+    // `?pais=br`: país pedido pelo próprio link (os links do feed do Merchant levam `?pais=br`).
+    // Vale mais que o IP: o Google visita a partir dos EUA e precisa ver na página o mesmo preço em R$ do feed.
+    const fromUrl = countryFromUrl(typeof window !== 'undefined' ? window.location.search : '');
+    if (fromUrl) {
+      safeStorage.setItem('sakura_selected_country', fromUrl);
+      return fromUrl as CountryType;
+    }
     const stored = safeStorage.getItem('sakura_selected_country');
     return (stored as CountryType) || 'Brasil';
   });
