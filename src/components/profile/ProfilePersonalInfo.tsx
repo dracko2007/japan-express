@@ -61,13 +61,10 @@ const ProfilePersonalInfo: React.FC<ProfilePersonalInfoProps> = ({
   return (
     <>
     {/* Personal Information */}
-    <div className="bg-card rounded-2xl border border-border p-6 lg:p-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="rounded-xl border border-border bg-card p-5">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-            <User className="w-5 h-5 text-primary" />
-          </div>
-          <h2 className="font-display text-2xl font-semibold text-foreground">
+          <h2 className="font-display text-base font-semibold text-foreground">
             {t('profile.info.title')}
           </h2>
         </div>
