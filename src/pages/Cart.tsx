@@ -26,6 +26,7 @@ import { computeCouponDiscount } from '@/utils/couponDiscount';
 import { recoveryErrorMessage } from '@/services/recoveryCouponService';
 import { useRecoveryLink } from '@/hooks/useRecoveryLink';
 import RecoveryCountdown from '@/components/cart/RecoveryCountdown';
+import { cartSubtotals } from '@/utils/cartTotals';
 import { recoveryCouponState, type RecoveryCouponState } from '@/utils/recoveryCouponState';
 import { taxDisclosure } from '../../shared/tax-disclosure.js';
 
@@ -318,19 +319,15 @@ const Cart: React.FC = () => {
   const unitOf = (item: (typeof items)[0]) => localCart.localPrice(item) ?? fxConvert(effectiveYen(item.product, item.size), currency);
   const pageDiscounted = (item: (typeof items)[0]) => (item.product.discountPercent || 0) > 0 && localCart.localPrice(item) === null;
 
-  // Subtotal dos itens em promoção (cupom NÃO se aplica a eles)
-  const promoSubtotal = items.reduce(
-    (sum, item) => (!item.freeGift && isPromoItem(item)) ? sum + unitOf(item) * item.quantity : sum, 0
-  );
-  // Cupom nenhum acumula com desconto da loja: a base só tem itens sem promoção e sem desconto.
+  // O TOTAL tem todos os itens marcados; a BASE DO CUPOM (`regularSubtotal`) exclui promoção da home e produto
+  // com desconto da loja (desconto não acumula). São contas diferentes: ver `utils/cartTotals.ts`.
+  const { promoSubtotal, regularSubtotal, baseTotalPrice } = cartSubtotals(items, {
+    isPromo: isPromoItem,
+    isStoreDiscounted: pageDiscounted,
+    unit: unitOf,
+  });
   const couponWithProductDiscount = Boolean(activeCoupon && !activeCoupon.freeShipping);
-  const regularSubtotal = items.reduce(
-    (sum, item) => (!item.freeGift && !isPromoItem(item) && !pageDiscounted(item))
-      ? sum + unitOf(item) * item.quantity
-      : sum, 0
-  );
   const hasCouponExcludedItems = items.some((item) => !item.freeGift && (isPromoItem(item) || pageDiscounted(item)));
-  const baseTotalPrice = promoSubtotal + regularSubtotal;
   const hasPromoItems = promoSubtotal > 0;
   const baseDoCupom = promoProductId
     ? items.reduce(
