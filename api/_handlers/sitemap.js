@@ -3,7 +3,7 @@
 // páginas que mais convertem. Produtos são públicos no Firestore (leitura REST sem auth).
 import { fetchProducts, escapeXml, isVisibleInternationally } from '../_lib/firestore-products.js';
 
-const SITE_ORIGIN = 'https://japanexpress-store.com';
+const SITE_ORIGIN = 'https://www.japanexpress-store.com';
 
 function toIso(ts) {
   try {

@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { SITE_ORIGIN } from '@/config/siteOrigin';
 
 export interface SeoOptions {
   /** Título da aba/guia. Se vazio, o hook não faz nada (página trata por outro lugar). */
@@ -9,7 +10,6 @@ export interface SeoOptions {
   type?: 'website' | 'product' | 'article';
 }
 
-const SITE_ORIGIN = 'https://japanexpress-store.com';
 const DEFAULT_OG_IMAGE = '/icons/icon-512x512.png?v=2';
 
 function upsertMeta(attr: 'name' | 'property', key: string, content: string) {
