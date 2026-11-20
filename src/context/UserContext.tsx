@@ -726,7 +726,11 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
         return { success: false, error: friendlyMessage, code: authCode };
       }
 
-      // For invalid credentials - distinguish between unregistered vs wrong password
+      // Credencial recusada. O Firebase Auth responde `auth/invalid-credential` tanto para e-mail sem conta
+      // quanto para senha errada (de propósito: não deixa descobrir quem tem cadastro). Quem não está logado
+      // também não pode ler `users` no Firestore, então não dá para distinguir os dois casos aqui — antes
+      // tentávamos, a leitura era negada e QUALQUER senha errada virava "Usuário não cadastrado".
+      // A mensagem vale para os dois casos e aponta a saída de cada um.
       const isCredentialError = [
         'auth/invalid-credential',
         'auth/user-not-found',
@@ -734,23 +738,10 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
       ].some(code => authCode.includes(code));
 
       if (isCredentialError) {
-        // Check if user exists in Firestore to give proper error message
-        try {
-          const existingUser = await firebaseSyncService.getUserByEmail(normalizedEmail);
-          if (existingUser) {
-            // User registered but password is wrong
-            return { 
-              success: false, 
-              error: 'Senha incorreta. Tente novamente ou use "Esqueceu a senha?" para redefinir.' 
-            };
-          }
-        } catch (e) {
-          // Firestore check failed, fall through to generic message
-        }
-        // User not found in Firestore - not registered
-        return { 
-          success: false, 
-          error: 'Usuário não cadastrado. Crie uma conta primeiro.' 
+        return {
+          success: false,
+          error: 'E-mail ou senha incorretos. Confira os dados, use "Esqueceu a senha?" para redefinir ou cadastre-se se ainda não tem conta.',
+          code: authCode
         };
       }
     }
