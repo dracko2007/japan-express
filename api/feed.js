@@ -351,6 +351,22 @@ ${identifierBlock}
 </rss>`;
 }
 
+/** `?limit=N`: só os N primeiros itens. Serve para a conta do Merchant que tem teto de produtos (capacidade). */
+export function parseLimit(value) {
+  const n = Number(Array.isArray(value) ? value[0] : value);
+  return Number.isInteger(n) && n >= 1 && n <= 5000 ? n : 0;
+}
+
+/** Com limite, ficam os de maior prioridade: destaques, depois os mais vendidos; o id desempata (ordem estável). */
+export function prioritizeProducts(products) {
+  const score = (p) => [p.featured === true ? 1 : 0, Number(p.salesCount) || 0];
+  return [...products].sort((a, b) => {
+    const [fa, sa] = score(a);
+    const [fb, sb] = score(b);
+    return fb - fa || sb - sa || String(a.id).localeCompare(String(b.id));
+  });
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
 
@@ -359,7 +375,9 @@ export default async function handler(req, res) {
 
   try {
     const [products, rates] = await Promise.all([fetchProducts(), getFxRates()]);
-    const items = buildCatalog(products, region, rates);
+    const limit = parseLimit(req.query.limit);
+    const built = buildCatalog(limit ? prioritizeProducts(products) : products, region, rates);
+    const items = limit ? built.slice(0, limit) : built;
 
     // Cache 6h no CDN da Vercel — feed não precisa ser em tempo real
     res.setHeader('Cache-Control', 's-maxage=21600, stale-while-revalidate=86400');
