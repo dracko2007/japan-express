@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Instagram, Facebook, Mail, MapPin, CreditCard, MessageCircle, Smartphone, Twitter } from 'lucide-react';
+import { Instagram, Facebook, Mail, MapPin, MessageCircle, Smartphone, Twitter } from 'lucide-react';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { COMPANY_PROFILE } from '@/config/companyProfile';
-import { paymentSettingsService, type PaymentSettings } from '@/services/paymentSettingsService';
+import { paymentSettingsService } from '@/services/paymentSettingsService';
+import PaymentMethods, { type PaymentMethodsState } from '@/components/layout/PaymentMethods';
 
 const WHATSAPP_NUMBER = COMPANY_PROFILE.whatsapp.digits;
 const INSTAGRAM_URL = 'https://www.instagram.com/japan_express_official/';
@@ -27,11 +28,11 @@ const Footer: React.FC = () => {
   const [showIOSHint, setShowIOSHint] = useState(false);
   // Formas de pagamento do checkout internacional, lidas das mesmas configurações que o checkout usa:
   // o rodapé nunca anuncia o que o cliente não consegue usar. Sem leitura, vale o padrão (cartão sim, Pix não).
-  const [payments, setPayments] = useState<Pick<PaymentSettings, 'cardEnabled' | 'pixEnabled'>>({ cardEnabled: true, pixEnabled: false });
+  const [payments, setPayments] = useState<PaymentMethodsState>({ cardEnabled: true, wiseEnabled: false, pixEnabled: false });
   useEffect(() => {
     let active = true;
     paymentSettingsService.get().then((settings) => {
-      if (active) setPayments({ cardEnabled: settings.cardEnabled, pixEnabled: settings.pixEnabled });
+      if (active) setPayments({ cardEnabled: settings.cardEnabled, wiseEnabled: settings.wiseEnabled, pixEnabled: settings.pixEnabled });
     });
     return () => { active = false; };
   }, []);
@@ -192,25 +193,12 @@ const Footer: React.FC = () => {
                   WhatsApp: {COMPANY_PROFILE.whatsapp.international}
                 </span>
               </a>
+              {!isJapan && <PaymentMethods t={t} methods={payments} />}
             </div>
           </div>
         </div>
 
-        {!isJapan && (
-          <div className="border-t border-accent-foreground/10 mt-10 pt-6" aria-label={t('footer.payments')}>
-            <h4 className="font-display font-semibold mb-2 text-sm">{t('footer.payments')}</h4>
-            <ul className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-accent-foreground/90">
-              {payments.cardEnabled && (
-                <li className="flex items-center gap-2"><CreditCard className="w-4 h-4" aria-hidden="true" />{t('footer.paymentCard')}</li>
-              )}
-              <li>
-                Pix{!payments.pixEnabled && <span className="ml-1 text-accent-foreground/70">({t('footer.paymentSoon')})</span>}
-              </li>
-            </ul>
-          </div>
-        )}
-
-        <div className={`${isJapan ? 'border-t border-accent-foreground/10 mt-10 pt-6' : 'mt-6 pt-6 border-t border-accent-foreground/10'} flex flex-col sm:flex-row items-center justify-between gap-3`}>
+        <div className="border-t border-accent-foreground/10 mt-10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-sm text-accent-foreground/85">
             © {new Date().getFullYear()} {COMPANY_PROFILE.brand}. {t('footer.rights')}
           </p>
