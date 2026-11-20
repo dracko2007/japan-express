@@ -39,7 +39,7 @@ vi.mock('@/context/LanguageContext', () => ({
 }));
 
 vi.mock('@/context/CartContext', () => ({
-  useCart: () => ({ items: itens, getSpaceUsed: getSpaceUsedEstavel }),
+  useCart: () => ({ items: itens, selectedItems: itens, getSpaceUsed: getSpaceUsedEstavel }),
 }));
 
 import ShippingCalculator from './ShippingCalculator';

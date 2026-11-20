@@ -13,6 +13,7 @@ import { referralService } from '@/services/referralService';
 import { affiliateService } from '@/services/affiliateService';
 import { trackSignUp, trackLogin } from '@/lib/analytics';
 import { sendVerificationEmail } from '@/services/mailService';
+import { flushCartSync } from '@/services/cartSyncService';
 import type { UserProfile, Coupon, Order, UserContextType } from '@/context/userTypes';
 import { makeWelcomeCoupon } from '@/context/userTypes';
 import { normalizeStoredOrder, fixTrackingUrl, mergeOrders } from '@/context/orderHelpers';
@@ -884,6 +885,8 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
 
   const logout = async () => {
     // Save current user's data before logging out (already done by useEffect)
+    // O carrinho grava com um pequeno atraso: grava a última alteração ANTES de perder a sessão.
+    await flushCartSync();
     // Logout from Firebase Auth
     await firebaseSyncService.logoutUser();
     

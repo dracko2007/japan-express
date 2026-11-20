@@ -29,7 +29,7 @@ const ShippingCalculator: React.FC<ShippingCalculatorProps> = ({
   const [selectedPrefecture, setSelectedPrefecture] = useState<string>(externalPrefecture || '');
   const [selectedCarrier, setSelectedCarrier] = useState<string | null>(null);
   const cart = useCart();
-  const items = itemsProp ?? cart.items;
+  const items = itemsProp ?? cart.selectedItems;
   const { t } = useLanguage();
 
   useEffect(() => {

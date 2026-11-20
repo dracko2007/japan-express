@@ -46,7 +46,9 @@ const affiliateToCoupon = (aff: AffiliateCouponInfo, productId?: string | null, 
 });
 
 const Cart: React.FC = () => {
-  const { items, clearCart, addToCart, removeFromCart } = useCart();
+  // `allItems` = tudo que está no carrinho; `items` = só o que está marcado para comprar. Totais, cupom, frete e
+  // checkout usam `items`; a lista na tela mostra `allItems`.
+  const { items: allItems, selectedItems: items, isItemSelected, toggleItemSelected, setAllItemsSelected, clearCart, addToCart, removeFromCart } = useCart();
   const { products } = useProducts();
   const { t, language, selectedCountry, setSelectedCountry } = useLanguage();
   const { isAuthenticated, authReady, validateProfileCoupon, coupons, user } = useUser();
@@ -231,7 +233,7 @@ const Cart: React.FC = () => {
   useEffect(() => {
     const addId = searchParams.get('add');
     if (!addId || products.length === 0) return;
-    if (items.some((i) => i.product.id === addId)) return;
+    if (allItems.some((i) => i.product.id === addId)) return;
     const produto = products.find((p) => p.id === addId);
     if (!produto) return;
     // Mesma convenção do card da vitrine: primeira variante, ou 'small' nos
@@ -239,7 +241,7 @@ const Cart: React.FC = () => {
     const variante = produto.variants?.[0];
     addToCart(produto, variante?.id || 'small', 1, variante?.label);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, products, items]);
+  }, [searchParams, products, allItems]);
 
   // Campanha promocional (?promo=CODE): armPending (compartilhado com a página
   // do produto) valida e arma preço original/brinde/pontos; aqui aplicamos só
@@ -382,7 +384,11 @@ const Cart: React.FC = () => {
   // "Enviar separado" = UM pedido e um pagamento, com dois envios (cada um com seu frete);
   // "Tudo junto do Japão" = um envio só, tudo com o preço e o frete do Japão. Nada sai do carrinho.
   const [mixedChoice, setMixedChoice] = useState<Record<string, unknown> | null>(null);
+  // Itens que podem ser marcados (brindes não: acompanham os itens marcados) e quantos estão marcados.
+  const selectableCount = allItems.filter((i) => !i.freeGift).length;
+  const purchasableCount = items.filter((i) => !i.freeGift).length;
   const goCheckout = (state: Record<string, unknown>) => {
+    if (purchasableCount === 0) return; // nada marcado: o botão já fica desabilitado
     if (localCart.split.kind === 'mixed' && !localCart.forcedJapan) { setMixedChoice(state); return; }
     navigate('/checkout', { state });
   };
@@ -446,8 +452,8 @@ const Cart: React.FC = () => {
               {t('cart.title')} {selectedCountry === 'Japão' ? '🇯🇵' : selectedCountry === 'Brasil' ? '🇧🇷' : selectedCountry === 'Portugal' ? '🇵🇹' : selectedCountry === 'França' ? '🇫🇷' : selectedCountry === 'Itália' ? '🇮🇹' : selectedCountry === 'Espanha' ? '🇪🇸' : ''}
             </h1>
             <p className="text-muted-foreground text-lg">
-              {items.length > 0
-                ? `${items.length} ${items.length === 1 ? t('cart.items') : t('cart.items_plural')}`
+              {allItems.length > 0
+                ? `${allItems.length} ${allItems.length === 1 ? t('cart.items') : t('cart.items_plural')}`
                 : t('cart.empty')
               }
             </p>
@@ -457,7 +463,7 @@ const Cart: React.FC = () => {
 
       <section className="py-12 bg-background">
         <div className="container mx-auto px-4">
-          {items.length > 0 ? (
+          {allItems.length > 0 ? (
             <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8 min-w-0">
               {/* Cart Items List */}
               <div className="lg:col-span-2 space-y-4 min-w-0">
@@ -485,6 +491,23 @@ const Cart: React.FC = () => {
                     </Button>
                   </div>
                 </div>
+                {/* Marcar o que vai ser comprado: o resto fica no carrinho para depois. */}
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm">
+                  <label className="flex items-center gap-2 font-semibold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-pink-600"
+                      checked={purchasableCount === selectableCount && selectableCount > 0}
+                      ref={(el) => { if (el) el.indeterminate = purchasableCount > 0 && purchasableCount < selectableCount; }}
+                      onChange={(e) => setAllItemsSelected(e.target.checked)}
+                      aria-label="Selecionar todos os itens para comprar"
+                    />
+                    Selecionar todos
+                  </label>
+                  <span className="text-xs text-muted-foreground" role="status">
+                    {purchasableCount} de {selectableCount} {selectableCount === 1 ? 'item marcado' : 'itens marcados'} para comprar
+                  </span>
+                </div>
                 {couponWithProductDiscount && discountedItemCount > 0 && (
                   <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
                     <p className="font-bold">🏷️ Produto(s) com desconto promocional</p>
@@ -496,12 +519,13 @@ const Cart: React.FC = () => {
 
 
 
-                {items.map((item) => {
+                {allItems.map((item) => {
                   // Desconto proporcional por item regular (cupom não se aplica a itens promo)
                   const itemIsPromo = item.product.id.endsWith('_promo');
+                  const itemSelected = isItemSelected(item);
                   const itemSubtotal = item.freeGift || itemIsPromo ? 0
                     : fxConvert(effectiveYen(item.product, item.size), currency) * item.quantity;
-                  const itemDiscount = (!itemIsPromo && activeCoupon && regularSubtotal > 0
+                  const itemDiscount = (itemSelected && !itemIsPromo && activeCoupon && regularSubtotal > 0
                     && !pageDiscounted(item))
                     ? discountAmount * (itemSubtotal / regularSubtotal)
                     : 0;
@@ -510,6 +534,8 @@ const Cart: React.FC = () => {
                       key={`${item.product.id}-${item.size}${item.freeGift ? '-gift' : ''}`}
                       item={item}
                       couponDiscount={itemDiscount}
+                      selected={itemSelected}
+                      onToggleSelected={() => toggleItemSelected(item.product.id, item.size)}
                     />
                   );
                 })}
@@ -755,9 +781,20 @@ const Cart: React.FC = () => {
                       O funil mostrava o resultado: 146 visitas ao carrinho e 139
                       ao cadastro — quase todo mundo empurrado a criar conta.
                       Os dois caminhos agora têm o mesmo peso visual. */}
+                  {purchasableCount === 0 && (
+                    <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-center text-xs font-semibold text-amber-800">
+                      Marque ao menos um item para finalizar a compra.
+                    </p>
+                  )}
+                  {purchasableCount > 0 && purchasableCount < selectableCount && (
+                    <p className="text-center text-[11px] text-muted-foreground">
+                      {selectableCount - purchasableCount} {selectableCount - purchasableCount === 1 ? 'item desmarcado continua' : 'itens desmarcados continuam'} no carrinho e não entra neste pedido.
+                    </p>
+                  )}
                   {isAuthenticated ? (
                     <Button
                       className="w-full btn-primary rounded-xl py-6 text-lg font-bold"
+                      disabled={purchasableCount === 0}
                       onClick={() => goCheckout({ coupon: activeCoupon })}
                     >
                       {t('cart.checkout')}
@@ -767,6 +804,7 @@ const Cart: React.FC = () => {
                     <div className="space-y-2">
                       <Button
                         className="w-full btn-primary rounded-xl py-6 text-lg font-bold"
+                        disabled={purchasableCount === 0}
                         onClick={() => goCheckout({ coupon: activeCoupon, isGuest: true })}
                       >
                         {t('cart.checkoutGuest')}
@@ -775,6 +813,7 @@ const Cart: React.FC = () => {
                       <Button
                         variant="outline"
                         className="w-full rounded-xl py-5 text-base font-semibold"
+                        disabled={purchasableCount === 0}
                         onClick={() => goCheckout({ coupon: activeCoupon })}
                       >
                         {t('cart.checkoutAccount')}

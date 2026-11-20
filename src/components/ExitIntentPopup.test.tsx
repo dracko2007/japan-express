@@ -23,8 +23,8 @@ vi.mock('@/context/UserContext', () => ({
   useUser: () => ({ isAuthenticated: true }),
 }));
 vi.mock('@/context/CartContext', () => ({
-  useCart: () => ({
-    items: [{
+  useCart: () => {
+    const items = [{
       product: { id: 'produto-1', prices: { small: 1450 }, noPsFee: false, localStock: mocks.localStock },
       size: 'small',
       quantity: 1,
@@ -32,8 +32,9 @@ vi.mock('@/context/CartContext', () => ({
       product: { id: 'produto-2', prices: { small: 2380 }, noPsFee: false },
       size: 'small',
       quantity: 1,
-    } as unknown as CartItem] : [])],
-  }),
+    } as unknown as CartItem] : [])];
+    return { items, selectedItems: items };
+  },
 }));
 vi.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: mocks.toast }) }));
 vi.mock('@/services/newsletterService', () => ({

@@ -40,7 +40,8 @@ const devError = isDev ? console.error.bind(console) : () => {};
 
 
 const Checkout: React.FC = () => {
-  const { items, totalPrice } = useCart();
+  // Só o que está marcado no carrinho vai para o pedido.
+  const { selectedItems: items, selectedTotalPrice: totalPrice } = useCart();
   const hasTrackedBeginCheckout = useRef(false);
 
   // Dispara begin_checkout (GA4 + Meta Pixel) uma única vez ao montar a página,

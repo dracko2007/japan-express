@@ -49,7 +49,7 @@ const devError = isDev ? console.error.bind(console) : () => {};
 
 
 const OrderReview: React.FC = () => {
-  const { items, clearCart } = useCart();
+  const { selectedItems: items, removePurchasedItems } = useCart();
   const { refresh: refreshProducts } = useProducts();
   const { consumeCouponByCode, user, addPoints, addOrder, addCoupon, orders } = useUser();
   const [pointsToUse, setPointsToUse] = useState<number>(() => {
@@ -402,7 +402,7 @@ const OrderReview: React.FC = () => {
     }
     void thermalPrintService.printOrder(pendingOrder);
 
-    clearCart();
+    removePurchasedItems(); // só o que foi comprado: o que ficou desmarcado continua no carrinho
     recoveryCouponState.clear(); // cupom de recuperação é de um pedido só: já foi usado
     setShipAllFromJapan(false); // a escolha "tudo do Japão" vale só para o pedido que acabou de ser feito
     safeStorage.removeItem('redeem_points');

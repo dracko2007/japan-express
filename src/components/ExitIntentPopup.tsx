@@ -97,7 +97,7 @@ const Shell: React.FC<{ label: string; onClose: () => void; children: React.Reac
  */
 const ExitIntentPopup: React.FC = () => {
   const { isAuthenticated } = useUser();
-  const { items } = useCart();
+  const { selectedItems: items } = useCart();
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
