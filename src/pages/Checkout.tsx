@@ -35,6 +35,12 @@ import { productEnglishName } from '@/utils/productName';
 import { isValidEmail, isValidCPF, isValidPhone, isNonEmpty, maskPhone, runValidations, FieldErrors } from '@/utils/validation';
 import { calcImportTax } from '@/utils/taxRules';
 import { trackBeginCheckout } from '@/lib/analytics';
+import CheckoutOrderSummary from '@/components/checkout/CheckoutOrderSummary';
+import CheckoutShippingCalculator from '@/components/checkout/CheckoutShippingCalculator';
+import CheckoutShippingAddress from '@/components/checkout/CheckoutShippingAddress';
+import CheckoutPersonalInfo from '@/components/checkout/CheckoutPersonalInfo';
+import CheckoutNegotiationModal from '@/components/checkout/CheckoutNegotiationModal';
+import CheckoutShippingMode from '@/components/checkout/CheckoutShippingMode';
 
 const isDev = import.meta.env.DEV;
 const devLog = isDev ? console.log.bind(console) : () => {};
@@ -736,140 +742,27 @@ const Checkout: React.FC = () => {
 
   return (
     <Layout>
-      {/* Forma de envio: separado (um pedido, dois envios) ou tudo junto do Japão */}
-      {shipChoiceOpen && (
-        <div className="fixed inset-0 z-[10002] flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-labelledby="ship-choice-title">
-          <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-2xl">
-            <h2 id="ship-choice-title" className="font-display text-xl font-bold text-foreground">Como você prefere receber?</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {split.localItems.length} {split.localItems.length === 1 ? 'item já está' : 'itens já estão'} no {formData.country}
-              {split.japanItems.length > 0 ? ` e ${split.japanItems.length} ${split.japanItems.length === 1 ? 'vem' : 'vêm'} do Japão` : ''}.
-            </p>
-            <div className="mt-5 space-y-3">
-              <button
-                type="button"
-                onClick={() => { setShipAllFromJapan(false); setShipChoiceOpen(false); }}
-                className={`w-full rounded-xl border-2 p-4 text-left transition hover:bg-emerald-100 ${localKind !== 'japan' ? 'border-emerald-500 bg-emerald-50' : 'border-border'}`}
-              >
-                <span className="block font-bold text-emerald-900">{split.japanItems.length > 0 ? 'Enviar separado' : `Enviar do ${formData.country}`}</span>
-                <span className="block text-xs text-emerald-800">
-                  {split.japanItems.length > 0
-                    ? `Um pedido e um pagamento só, em dois envios: os itens do ${formData.country} saem de lá com o frete nacional e os do Japão saem do Japão com o frete internacional.`
-                    : `Os itens saem de lá com o frete nacional, sem taxas de importação.`}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => { setShipAllFromJapan(true); setShipChoiceOpen(false); }}
-                className={`w-full rounded-xl border-2 p-4 text-left transition hover:bg-secondary/50 ${localKind === 'japan' ? 'border-emerald-500 bg-emerald-50' : 'border-border'}`}
-              >
-                <span className="block font-bold text-foreground">Enviar tudo junto do Japão</span>
-                <span className="block text-xs text-muted-foreground">
-                  Um envio só, tudo sai do Japão. Todos os itens passam a usar o preço e o frete do Japão.
-                </span>
-              </button>
-            </div>
-            <button type="button" onClick={() => setShipChoiceOpen(false)} className="mt-4 w-full text-center text-sm text-muted-foreground hover:underline">Fechar</button>
-          </div>
-        </div>
-      )}
-      {/* Modal de negociação */}
-      {negModalType && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Handshake className="w-5 h-5 text-primary" />
-                <h3 className="font-display font-bold text-lg text-foreground">
-                  {negModalType === 'ps_fee' ? 'Negociar Taxa Personal Shopper' : 'Negociar Frete'}
-                </h3>
-              </div>
-              <button onClick={() => { setNegModalType(null); setNegRequest(''); setNegNote(''); }} className="text-muted-foreground hover:text-foreground">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="bg-secondary/40 rounded-xl p-4 mb-4 text-sm space-y-1">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">
-                  {negModalType === 'ps_fee' ? `Taxa PS (${psFeeQty} itens × ¥1.000)` : 'Frete selecionado'}
-                </span>
-                <span className="font-semibold">
-                  ¥{(negModalType === 'ps_fee' ? psFeeYen : (selectedShipping?.costYen || 0)).toLocaleString()}
-                </span>
-              </div>
-              {negModalType === 'ps_fee' && (
-                <p className="text-xs text-primary font-medium">
-                  Desconto até ¥{maxAutoApprovable.toLocaleString()} é aprovado automaticamente.
-                </p>
-              )}
-              {negModalType === 'shipping' && (
-                <p className="text-xs text-pink-500 font-medium">
-                  Desconto no frete requer aprovação manual da vendedora.
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-semibold text-foreground mb-1">
-                  Desconto solicitado (em ienes ¥)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={negRequest}
-                  onChange={e => setNegRequest(e.target.value)}
-                  placeholder="Ex: 500"
-                  className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-foreground mb-1">
-                  Mensagem (opcional)
-                </label>
-                <textarea
-                  rows={2}
-                  value={negNote}
-                  onChange={e => setNegNote(e.target.value)}
-                  placeholder="Ex: Compra recorrente, posso fechar logo..."
-                  className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary text-sm resize-none"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-5">
-              <button
-                onClick={() => { setNegModalType(null); setNegRequest(''); setNegNote(''); }}
-                className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold text-muted-foreground hover:bg-secondary/60 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleNegotiationSubmit}
-                disabled={negSubmitting || !negRequest}
-                className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
-              >
-                {negSubmitting ? 'Enviando...' : 'Enviar Proposta'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="gradient-hero py-16">
-        <div className="container mx-auto px-4">
-          <div className="text-center">
-            <h1 className="font-display text-4xl lg:text-5xl font-bold text-foreground mb-4">
-              Finalizar Pedido
-            </h1>
-            <p className="text-muted-foreground text-lg">
-              Preencha seus dados para receber os produtos importados do Japão
-            </p>
-          </div>
-        </div>
-      </div>
-
+      <CheckoutShippingMode
+        shipChoiceOpen={shipChoiceOpen}
+        split={split}
+        formData={formData}
+        setShipChoiceOpen={setShipChoiceOpen}
+        localKind={localKind}
+      />
+      <CheckoutNegotiationModal
+        negModalType={negModalType}
+        setNegModalType={setNegModalType}
+        setNegRequest={setNegRequest}
+        setNegNote={setNegNote}
+        psFeeQty={psFeeQty}
+        psFeeYen={psFeeYen}
+        selectedShipping={selectedShipping}
+        maxAutoApprovable={maxAutoApprovable}
+        negRequest={negRequest}
+        negNote={negNote}
+        handleNegotiationSubmit={handleNegotiationSubmit}
+        negSubmitting={negSubmitting}
+      />
       <section className="py-12 bg-background">
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto min-w-0">
@@ -896,725 +789,99 @@ const Checkout: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Personal Information */}
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
-                      Informações Pessoais
-                    </h3>
-                    
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="name" className="flex items-center gap-2 font-semibold">
-                          <User className="w-4 h-4 text-gray-500" />
-                          Nome Completo *
-                        </Label>
-                        <Input
-                          id="name"
-                          name="name"
-                          type="text"
-                          placeholder="Ex: João Silva"
-                          value={formData.name}
-                          onChange={handleInputChange}
-                          aria-invalid={!!errors.name}
-                          className={errors.name ? 'border-destructive' : ''}
-                          required
-                        />
-                        {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="phone" className="flex items-center gap-2 font-semibold">
-                          <Phone className="w-4 h-4 text-gray-500" />
-                          Telefone Celular *
-                        </Label>
-                        <Input
-                          id="phone"
-                          name="phone"
-                          type="tel"
-                          placeholder="Ex: 090-1234-5678"
-                          value={formData.phone}
-                          onChange={handleInputChange}
-                          aria-invalid={!!errors.phone}
-                          className={errors.phone ? 'border-destructive' : ''}
-                          maxLength={13}
-                          required
-                        />
-                        {errors.phone && <p className="text-xs text-destructive">{errors.phone}</p>}
-                      </div>
-                    </div>
-
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="email" className="flex items-center gap-2 font-semibold">
-                          <Mail className="w-4 h-4 text-gray-500" />
-                          Email *
-                        </Label>
-                        <Input
-                          id="email"
-                          name="email"
-                          type="email"
-                          placeholder="exemplo@email.com"
-                          value={formData.email}
-                          onChange={handleInputChange}
-                          aria-invalid={!!errors.email}
-                          className={errors.email ? 'border-destructive' : ''}
-                          required
-                        />
-                        {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
-                      </div>
-
-                    {formData.country === 'Brasil' && (
-                      <div className="space-y-2">
-                        <Label htmlFor="cpf" className="flex items-center gap-2 font-semibold">
-                          <User className="w-4 h-4 text-gray-500" />
-                          CPF (Obrigatório Aduana) *
-                        </Label>
-                        <Input
-                          id="cpf"
-                          name="cpf"
-                          type="text"
-                          placeholder="000.000.000-00"
-                          value={formData.cpf}
-                          onChange={handleCpfChange}
-                          aria-invalid={!!errors.cpf}
-                          className={errors.cpf ? 'border-destructive' : ''}
-                          required
-                        />
-                        {errors.cpf ? (
-                          <p className="text-xs text-destructive">{errors.cpf}</p>
-                        ) : (
-                          <p className="text-[10px] text-gray-400">
-                            Exigido pela Receita Federal para desembaraço de importação.
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    </div>
-                  </div>
-
-                  {/* Shipping Address */}
-                  <div className="space-y-4 pt-4 border-t border-gray-100">
-                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
-                      Endereço de Entrega
-                    </h3>
-                    
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="country" className="font-semibold">
-                          País de Destino *
-                        </Label>
-                        <select
-                          id="country"
-                          name="country"
-                          value={formData.country}
-                          onChange={(e) => {
-                            const val = e.target.value as CountryType;
-                            setSelectedCountry(val);
-                            setFormData(prev => ({
-                              ...prev,
-                              country: val,
-                              prefecture: '',
-                              postalCode: '',
-                              city: '',
-                              address: '',
-                              building: '',
-                            }));
-                          }}
-                          required
-                          className="w-full p-2.5 rounded-lg border border-border bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary transition font-medium text-sm"
-                        >
-                          {WORLD_COUNTRIES.map((c) => (
-                            <option key={c.name} value={c.name}>
-                              {c.name}{c.name === 'Japão' ? ' (Envio Local)' : ' (Envio Internacional)'}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="postalCode" className="font-semibold">
-                          {formData.country === 'Japão' ? 'Código Postal (ZIP) *' : formData.country === 'Estados Unidos' ? 'ZIP Code *' : ['Portugal', 'França', 'Itália', 'Espanha'].includes(formData.country) ? 'Código Postal *' : 'CEP *'}
-                        </Label>
-                        <Input
-                          id="postalCode"
-                          name="postalCode"
-                          type="text"
-                          placeholder={formData.country === 'Japão' ? '123-4567' : formData.country === 'Portugal' ? '0000-000' : ['França', 'Itália', 'Espanha', 'Estados Unidos'].includes(formData.country) ? '00000' : '00000-000'}
-                          value={formData.postalCode}
-                          onChange={handlePostalCodeChange}
-                          required
-                        />
-                        <p className="text-[10px] text-gray-400">
-                          {formData.country === 'Japão'
-                            ? 'Preenche o endereço japonês automaticamente (7 dígitos).'
-                            : formData.country === 'Portugal'
-                            ? 'Formato XXXX-XXX (ex: 2910-112) — preenche cidade automaticamente.'
-                            : formData.country === 'Estados Unidos'
-                            ? 'Enter ZIP code (5 digits) — city and state auto-filled.'
-                            : ['França', 'Itália', 'Espanha'].includes(formData.country)
-                            ? 'Formato XXXXX (5 dígitos) — preenche cidade automaticamente.'
-                            : 'Preenche o endereço brasileiro automaticamente (8 dígitos).'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="prefecture" className="font-semibold">
-                          {formData.country === 'Japão' ? 'Província *' : formData.country === 'Estados Unidos' ? 'State *' : ['Portugal', 'França', 'Itália', 'Espanha'].includes(formData.country) ? 'Região / Distrito *' : formData.country === 'Brasil' ? 'Estado (UF) *' : 'State / Region *'}
-                        </Label>
-                        {(() => {
-                          // Países com lista pronta usam select; os demais usam texto livre
-                          const stateList =
-                            formData.country === 'Japão' ? japanPrefectures
-                            : formData.country === 'Estados Unidos' ? usStates
-                            : formData.country === 'Brasil' ? prefectures
-                            : ['Portugal', 'França', 'Itália', 'Espanha'].includes(formData.country)
-                              ? (europePrefectures[formData.country] || [])
-                              : null;
-                          if (!stateList) {
-                            // Texto livre (preenchido automaticamente pelo CEP quando disponível)
-                            return (
-                              <Input
-                                id="prefecture"
-                                name="prefecture"
-                                type="text"
-                                placeholder="State / Region"
-                                value={formData.prefecture}
-                                onChange={handleInputChange}
-                                required
-                              />
-                            );
-                          }
-                          return (
-                            <select
-                              id="prefecture"
-                              name="prefecture"
-                              value={formData.prefecture}
-                              onChange={handleInputChange}
-                              required
-                              className="w-full p-2.5 rounded-lg border border-border bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary transition font-medium text-sm"
-                            >
-                              <option value="">
-                                {formData.country === 'Japão' ? 'Escolha a Província...'
-                                  : formData.country === 'Estados Unidos' ? 'Select your State...'
-                                  : ['Portugal', 'França', 'Itália', 'Espanha'].includes(formData.country) ? 'Escolha a Região/Distrito...'
-                                  : 'Escolha seu Estado...'}
-                              </option>
-                              {stateList.map((pref) => (
-                                <option key={pref.name} value={pref.name}>
-                                  {pref.nameJa || pref.name} ({pref.name})
-                                </option>
-                              ))}
-                            </select>
-                          );
-                        })()}
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="city" className="font-semibold">
-                          Cidade *
-                        </Label>
-                        <Input
-                          id="city"
-                          name="city"
-                          type="text"
-                          placeholder="Ex: São Paulo"
-                          value={formData.city}
-                          onChange={handleInputChange}
-                          aria-invalid={!!errors.city}
-                          className={errors.city ? 'border-destructive' : ''}
-                          required
-                        />
-                        {errors.city && <p className="text-xs text-destructive">{errors.city}</p>}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="address" className="font-semibold">
-                        Rua e Número *
-                      </Label>
-                      <Input
-                        id="address"
-                        name="address"
-                        type="text"
-                        placeholder="Ex: Avenida Paulista, 1000"
-                        value={formData.address}
-                        onChange={handleInputChange}
-                        aria-invalid={!!errors.address}
-                        className={errors.address ? 'border-destructive' : ''}
-                        required
-                      />
-                      {errors.address && <p className="text-xs text-destructive">{errors.address}</p>}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="building" className="font-semibold">
-                        Complemento / Bloco / Apto (Opcional)
-                      </Label>
-                      <Input
-                        id="building"
-                        name="building"
-                        type="text"
-                        placeholder="Ex: Bloco B, Apto 42"
-                        value={formData.building}
-                        onChange={handleInputChange}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Shipping Calculator Section */}
-                  <div className="pt-4 border-t border-border">
-                    {anyLocal && (
-                      <div className={mixedOrder ? 'mb-6' : ''}>
-                        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-4">
-                          {mixedOrder ? `Envio nacional (itens do ${formData.country})` : 'Envio nacional'}
-                        </h3>
-                        {localShippingValue !== null ? (
-                          <div className="flex items-center justify-between rounded-xl border-2 border-emerald-500 bg-emerald-50 p-4">
-                            <div>
-                              <p className="font-bold text-emerald-900">📍 {localCarrierLabel(formData.country)}{localShippingPicked && localShippingOptions.length > 1 ? ` • ${localShippingPicked.name}` : ''}</p>
-                              <p className="text-xs text-emerald-800">
-                                {mixedOrder ? `Estes itens já estão no ${formData.country} e saem de lá: sem taxas de importação.` : `Seus produtos já estão no ${formData.country}: sem taxas de importação.`}
-                              </p>
-                            </div>
-                            <span className="font-extrabold text-emerald-900">
-                              {localShippingValue === 0 ? 'Grátis' : formatPrice(localShippingValue, currency, true)}
-                            </span>
-                          </div>
-                        ) : null}
-                        {/* Mais de uma opção e nenhuma casa com o cliente: ele escolhe. */}
-                        {localShippingValue === null && localShippingOptions.length > 0 && (
-                          <div className="space-y-2" role="radiogroup" aria-label="Frete nacional">
-                            <p className="text-sm text-muted-foreground">Escolha o frete:</p>
-                            {localShippingOptions.map((option) => (
-                              <label key={option.name} className="flex cursor-pointer items-center justify-between rounded-xl border-2 border-border p-3 hover:border-emerald-500">
-                                <span className="flex items-center gap-2 font-semibold">
-                                  <input type="radio" name="local-shipping" checked={localShippingChoice === option.name} onChange={() => setLocalShippingChoice(option.name)} />
-                                  {option.name}
-                                </span>
-                                <span className="font-extrabold">{option.price === 0 ? 'Grátis' : formatPrice(option.price, currency, true)}</span>
-                              </label>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {!localOrder && (
-                      <>
-                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-4">
-                      {mixedOrder ? 'Envio do Japão (demais itens)' : 'Forma de Envio Internacional'}
-                    </h3>
-                    <ShippingCalculator 
-                      selectedPrefecture={formData.prefecture}
-                      onShippingSelect={setSelectedShipping}
-                      destinationCountry={formData.country as CountryType}
-                      couponDiscount={couponDiscount}
-                      items={mixedOrder ? split.japanItems : undefined}
-                    />
-                      </>
-                    )}
-                  </div>
-
-                  <div className="pt-4 border-t border-border">
-                    {negIsPending ? (
-                      <div className="w-full rounded-xl border-2 border-dashed border-pink-300 bg-pink-50 dark:bg-pink-950/20 p-4 text-center space-y-1">
-                        <div className="flex items-center justify-center gap-2 text-pink-600 font-bold">
-                          <Hourglass className="w-4 h-4 animate-pulse" />
-                          Aguardando resposta da vendedora
-                        </div>
-                        <p className="text-xs text-pink-500">
-                          Expira em 24h · Acompanhe em Perfil → Negociações
-                        </p>
-                      </div>
-                    ) : negActuallyExpired ? (
-                      <div className="space-y-2">
-                        <div className="w-full rounded-xl border border-gray-300 bg-gray-50 dark:bg-gray-900/30 p-3 text-center text-xs text-muted-foreground">
-                          Negociação expirada sem resposta.
-                          <button
-                            type="button"
-                            onClick={() => { setActiveNegId(null); setPsFeeDiscountYen(0); setShippingDiscountYen(0); localStorage.removeItem('activeNegId'); }}
-                            className="block mx-auto mt-1 text-primary hover:underline font-semibold"
-                          >
-                            Limpar e tentar novamente
-                          </button>
-                        </div>
-                        <Button type="submit" className="w-full btn-primary rounded-xl py-6 text-lg font-bold" disabled={!selectedShipping || (anyLocal && localShippingValue === null)}>
-                          Ir para a Revisão do Pedido <ArrowRight className="w-5 h-5 ml-2" />
-                        </Button>
-                      </div>
-                    ) : (
-
-                      <>
-                        <Button
-                          type="submit"
-                          className="w-full btn-primary rounded-xl py-6 text-lg font-bold"
-                          disabled={!selectedShipping || (anyLocal && localShippingValue === null)}
-                        >
-                          Ir para a Revisão do Pedido
-                          <ArrowRight className="w-5 h-5 ml-2" />
-                        </Button>
-                        {(!selectedShipping || (anyLocal && localShippingValue === null)) && (
-                          <p className="text-xs text-muted-foreground text-center mt-2">
-                            Selecione uma forma de entrega para continuar
-                          </p>
-                        )}
-                      </>
-                    )}
-                  </div>
+                  <CheckoutPersonalInfo
+                    formData={formData}
+                    handleInputChange={handleInputChange}
+                    errors={errors}
+                    handleCpfChange={handleCpfChange}
+                  />
+                  <CheckoutShippingAddress
+                    formData={formData}
+                    setSelectedCountry={setSelectedCountry}
+                    setFormData={setFormData}
+                    handlePostalCodeChange={handlePostalCodeChange}
+                    handleInputChange={handleInputChange}
+                    errors={errors}
+                  />
+                  <CheckoutShippingCalculator
+                    anyLocal={anyLocal}
+                    mixedOrder={mixedOrder}
+                    formData={formData}
+                    localShippingValue={localShippingValue}
+                    localShippingPicked={localShippingPicked}
+                    localShippingOptions={localShippingOptions}
+                    currency={currency}
+                    localShippingChoice={localShippingChoice}
+                    setLocalShippingChoice={setLocalShippingChoice}
+                    localOrder={localOrder}
+                    setSelectedShipping={setSelectedShipping}
+                    couponDiscount={couponDiscount}
+                    split={split}
+                    negIsPending={negIsPending}
+                    negActuallyExpired={negActuallyExpired}
+                    setActiveNegId={setActiveNegId}
+                    setPsFeeDiscountYen={setPsFeeDiscountYen}
+                    setShippingDiscountYen={setShippingDiscountYen}
+                    selectedShipping={selectedShipping}
+                  />
                 </form>
               </div>
             </div>
 
-            {/* Order Summary Sidebar */}
-            <div className="lg:col-span-1 min-w-0">
-              <div className="sticky top-24 bg-card rounded-2xl border border-border p-6 space-y-6 shadow-sm min-w-0">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Package className="w-5 h-5 text-primary" />
-                  </div>
-                  <h2 className="font-sans text-lg font-bold text-foreground">
-                    Resumo do Pedido
-                  </h2>
-                </div>
-
-                {/* Há itens que já estão no país do cliente: ele pode trocar a forma de envio a qualquer momento */}
-                {split.kind !== 'japan' && (
-                  <button
-                    type="button"
-                    onClick={() => setShipChoiceOpen(true)}
-                    className="mb-4 flex w-full items-center justify-between gap-3 rounded-xl border-2 border-emerald-500 bg-emerald-50 px-4 py-3 text-left transition hover:bg-emerald-100"
-                  >
-                    <span>
-                      <span className="block text-sm font-bold text-emerald-900">Modificar forma de envio</span>
-                      <span className="block text-xs text-emerald-800">
-                        {localKind === 'japan' ? 'Agora: tudo junto do Japão' : mixedOrder ? 'Agora: enviar separado (um pedido, dois envios)' : `Agora: tudo enviado do ${formData.country}`}
-                      </span>
-                    </span>
-                    <Truck className="h-5 w-5 shrink-0 text-emerald-700" />
-                  </button>
-                )}
-                <div className="space-y-4">
-                  {items.map((item) => {
-                    const itemIsPromo = item.product.id.endsWith('_promo');
-                    const currentUnitPrice = item.freeGift ? 0 : unitDisplayOf(item);
-                    const originalUnitPrice = item.freeGift ? 0 : (isLocalItem(item) ? currentUnitPrice : fxConvert(baseYen(item.product, item.size), currency));
-                    const displayItemPrice = currentUnitPrice * item.quantity;
-                    const originalItemPrice = originalUnitPrice * item.quantity;
-                    const productName = productEnglishName(item.product);
-                    const hasProductDiscount = !isLocalItem(item) && hasDiscount(item.product);
-                    const affiliateEligible = Boolean(appliedCoupon?.affiliateCode)
-                      && !item.freeGift && !itemIsPromo && !hasProductDiscount;
-                    const itemCouponDiscount = affiliateEligible && regularSubtotalForCoupon > 0
-                      ? couponDiscount * (displayItemPrice / regularSubtotalForCoupon)
-                      : 0;
-                    const finalItemPrice = Math.max(0, displayItemPrice - itemCouponDiscount);
-                    return (
-                      <div
-                        key={`${item.product.id}-${item.size}`}
-                        className="flex items-center gap-3 py-2"
-                      >
-                        <img
-                          src={item.product.image}
-                          alt={productName}
-                          className="w-12 h-12 rounded-lg object-cover border border-gray-200"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-xs text-gray-800 truncate">{productName}</p>
-                          {hasProductDiscount && (
-                            <p className="text-[10px] text-muted-foreground line-through">{formatPrice(originalItemPrice, currency)}</p>
-                          )}
-                          {affiliateEligible && itemCouponDiscount > 0 && (
-                            <p className="text-[10px] text-muted-foreground line-through">{formatPrice(displayItemPrice, currency)}</p>
-                          )}
-                          {(itemIsPromo || hasProductDiscount) && (
-                            <p className="text-[10px] text-red-600 font-bold">
-                              {hasProductDiscount ? `−${item.product.discountPercent}% desconto da loja` : 'Preço promocional da loja'}
-                            </p>
-                          )}
-                          {affiliateEligible && itemCouponDiscount > 0 && (
-                            <p className="text-[10px] text-green-600 font-bold">
-                              −{appliedCoupon?.discount}% cupom de afiliado
-                            </p>
-                          )}
-                          {mixedOrder && !item.freeGift && (
-                            <p className={`text-[10px] font-bold ${isLocalItem(item) ? 'text-emerald-700' : 'text-gray-500'}`}>
-                              {isLocalItem(item) ? `📍 Enviado do ${formData.country}` : '✈️ Enviado do Japão'}
-                            </p>
-                          )}
-                          <p className="text-[10px] text-gray-400 font-semibold mt-0.5">
-                            {item.freeGift ? '🎁 Presente da promoção' : (item.variantLabel || (item.size === 'small' ? 'Pequeno' : 'Grande'))} • {item.quantity}x
-                          </p>
-                        </div>
-                        <p className={`font-bold text-xs ${item.freeGift ? 'text-green-600' : 'text-gray-800'}`}>
-                          {item.freeGift ? 'GRÁTIS' : formatPrice(finalItemPrice, currency, isLocalItem(item))}
-                        </p>
-                      </div>
-                    );
-                  })}
-                  {discountedItemCount > 0 && (
-                    <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
-                      <p className="font-bold">🏷️ Produto(s) com desconto promocional</p>
-                      <p className="mt-0.5">
-                        {discountedItemCount} item(ns) já tem desconto da loja. O cupom de afiliado só será aplicado aos produtos fora da promoção; não há acúmulo de descontos.
-                      </p>
-                    </div>
-                  )}
-
-
-                  {/* Coupon Selector Widget */}
-                  <CouponSelector
-                    totalPrice={regularSubtotalForCoupon}
-                    currency={currency}
-                    onCouponApply={handleCouponApply}
-                    onCouponRemove={handleCouponRemove}
-                    appliedCoupon={appliedCoupon}
-                  />
-
-                  {/* Points Redemption */}
-                  {isAuthenticated && !isGuest && (
-                    <div className={`rounded-xl p-3 border text-xs ${canRedeem ? 'bg-purple-50 dark:bg-purple-950/20 border-dashed border-purple-300' : 'bg-muted/40 border-border'}`}>
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <Sparkles className={`w-3.5 h-3.5 ${canRedeem ? 'text-purple-600' : 'text-muted-foreground'}`} />
-                        <span className={`font-bold ${canRedeem ? 'text-purple-800 dark:text-purple-300' : 'text-muted-foreground'}`}>
-                          Pontos de fidelidade ({availablePoints} disponíveis)
-                        </span>
-                      </div>
-                      {!canRedeem ? (
-                        <p className="text-muted-foreground leading-snug">
-                          Mínimo de <strong>{POINTS.minRedeem} pontos</strong> para resgatar. Faltam <strong>{POINTS.minRedeem - availablePoints}</strong> pontos.
-                        </p>
-                      ) : (
-                        <>
-                          <p className="text-purple-700 mb-2 leading-snug">1 ponto = ¥1 de desconto. Máx. resgatável: {maxRedeemable} pts.</p>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="number" min={0} max={maxRedeemable}
-                              value={pointsToUse || ''}
-                              onChange={e => setPointsToUse(Math.max(0, Math.min(maxRedeemable, Number(e.target.value) || 0)))}
-                              placeholder="0"
-                              className="w-24 px-2 py-1.5 rounded-lg border border-purple-300 bg-background text-sm"
-                            />
-                            <button type="button" onClick={() => setPointsToUse(maxRedeemable)}
-                              className="text-xs font-semibold text-purple-700 hover:underline">
-                              Usar máx.
-                            </button>
-                            {redeemPoints > 0 && (
-                              <button type="button" onClick={() => setPointsToUse(0)}
-                                className="text-xs text-muted-foreground hover:underline ml-auto">
-                                limpar
-                              </button>
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Calculations breakdown */}
-                  <div className="space-y-2 pt-2 text-xs">
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground min-w-0 truncate">Subtotal dos itens</span>
-                      <span className="font-semibold text-gray-800 shrink-0 whitespace-nowrap">{formatPrice(shown.subtotal, currency, anyLocal)}</span>
-                    </div>
-
-                    {appliedCoupon && couponDiscount > 0 && (
-                      <div className="flex justify-between text-green-600 font-bold bg-green-50/50 p-1.5 rounded border border-dashed border-green-200">
-                        <span>Desconto ({appliedCoupon.code})</span>
-                        <span>-{formatPrice(couponDiscount, currency)}</span>
-                      </div>
-                    )}
-
-                    {redeemPoints > 0 && (
-                      <div className="flex justify-between text-purple-700 font-bold bg-purple-50/60 p-1.5 rounded border border-dashed border-purple-200">
-                        <span>Pontos ({redeemPoints} pts)</span>
-                        <span>-{formatPrice(pointsDiscount, currency)}</span>
-                      </div>
-                    )}
-
-                    {/* Tax displays only as estimated warnings in sidebar */}
-                    {formData.country !== 'Japão' && estimatedTax > 0 && (
-                      <div className="bg-pink-50/50 dark:bg-pink-950/10 border border-pink-200/60 rounded-xl p-3 space-y-2 mt-2">
-                        <div className="flex justify-between text-xs font-bold text-orange-850 dark:text-pink-300">
-                          <span>{taxLabel}</span>
-                          <span>{formatPrice(estimatedTax, currency)}</span>
-                        </div>
-                        <p className="text-[10px] text-pink-700 dark:text-pink-400 leading-relaxed font-semibold">
-                          ⚠️ <strong>Lembrete:</strong> Este imposto é estimado e poderá ser cobrado pela alfândega na chegada ao país. Ele <strong>NÃO</strong> está incluído no total cobrado no site.
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Frete do Japão (itens que vêm de lá) e frete nacional (itens do país do cliente): duas remessas */}
-                    {mixedOrder && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Frete nacional ({formData.country})</span>
-                        {localShippingValue !== null ? (
-                          <span className="font-semibold text-gray-800">
-                            {shown.nationalShipping === 0 ? 'Grátis' : formatPrice(shown.nationalShipping, currency, true)}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground text-[10px]">Escolha o frete</span>
-                        )}
-                      </div>
-                    )}
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">
-                        {localOrder ? 'Frete nacional' : formData.country === 'Japão' ? 'Frete Local' : mixedOrder ? 'Frete Internacional (Japão)' : 'Frete Internacional'}
-                      </span>
-                      {selectedShipping ? (
-                        <span className="font-semibold text-gray-800">
-                          {(actualShippingCost - shown.nationalShipping) === 0 ? 'Grátis' : formatPrice(actualShippingCost - shown.nationalShipping, currency, anyLocal)}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground text-[10px]">
-                          {formData.country === 'Japão' ? 'Aguardando Província' : 'Aguardando Estado'}
-                        </span>
-                      )}
-                    </div>
-
-                    {selectedShipping && (
-                      <div className="text-[10px] text-gray-400 text-right">
-                        {selectedShipping.carrier}{selectedShipping.estimatedDays ? ` • ${selectedShipping.estimatedDays} dias` : ''}
-                      </div>
-                    )}
-
-                    {/* Taxa Personal Shopper (e negociação de taxa/frete): não existe em pedido enviado do país do cliente */}
-                    {totalQty > 0 && !localOrder && (
-                      <div className="pt-2 border-t border-border/60">
-                        <div className="flex justify-between items-center">
-                          <span className="text-muted-foreground">Taxa Personal Shopper</span>
-                          <div className="text-right">
-                            {effectivePsFeeDiscountYen > 0 ? (
-                              <>
-                                <span className="text-[10px] text-muted-foreground line-through mr-1">
-                                  {currency === 'JPY' ? `¥ ${psFeeYen.toLocaleString()}` : `${formatPrice(psFeeOriginalDisplay, currency, true)} (¥ ${psFeeYen.toLocaleString()})`}
-                                </span>
-                                <span className="font-semibold text-green-600">
-                                  {currency === 'JPY' ? `¥ ${psFeeFinalYen.toLocaleString()}` : `${formatPrice(psFeeDisplay, currency, true)} (¥ ${psFeeFinalYen.toLocaleString()})`}
-                                </span>
-                              </>
-                            ) : (
-                              <span className="font-semibold">
-                                {currency === 'JPY' ? `¥ ${psFeeFinalYen.toLocaleString()}` : `${formatPrice(psFeeDisplay, currency, true)} (¥ ${psFeeFinalYen.toLocaleString()})`}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between mt-1">
-                          <span className="text-[10px] text-muted-foreground">{psFeeQty}x ¥{PS_FEE_PER_UNIT_YEN.toLocaleString()} • serviço de compra</span>
-                          {psFeeWaived && (
-                            <span className="text-[10px] text-green-600 font-bold flex items-center gap-0.5">
-                              <CheckCircle2 className="w-3 h-3" /> Isenta — oferta
-                            </span>
-                          )}
-                          {negIsApproved && activeNeg?.type === 'ps_fee' && (
-                            <span className="text-[10px] text-green-600 font-bold flex items-center gap-0.5">
-                              <CheckCircle2 className="w-3 h-3" /> Aprovado
-                            </span>
-                          )}
-                          {negIsPending && activeNeg?.type === 'ps_fee' && (
-                            <span className="text-[10px] text-pink-500 font-bold flex items-center gap-0.5">
-                              <Hourglass className="w-3 h-3" /> Aguardando
-                            </span>
-                          )}
-                          {negIsRejected && activeNeg?.type === 'ps_fee' && (
-                            <span className="text-[10px] text-red-500 font-bold flex items-center gap-0.5">
-                              <AlertCircle className="w-3 h-3" /> Recusado
-                            </span>
-                          )}
-                          {negActuallyExpired && activeNeg?.type === 'ps_fee' && (
-                            <span className="text-[10px] text-gray-400 font-bold flex items-center gap-0.5">
-                              <AlertCircle className="w-3 h-3" /> Expirado
-                            </span>
-                          )}
-                        </div>
-                        {/* A dona relatou que todo mundo passava batido pela taxa: o antigo link de
-                            10px parecia rótulo, não convite. Agora é um alvo de toque cheio que
-                            "respira" (pulse-zoom) até ser clicado. Texto "Pedir desconto" em vez de
-                            "Negociar" porque nomeia o benefício, não o processo. */}
-                        {!psFeeWaived && !activeNeg && !pointsCoverAllProducts && (
-                          <div className="mt-2">
-                            <button
-                              type="button"
-                              onClick={() => setNegModalType('ps_fee')}
-                              className="w-full min-h-[44px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 border-primary bg-pink-50 dark:bg-pink-950/20 text-sm font-bold text-pink-700 dark:text-pink-300 transition-colors hover:bg-pink-700 hover:text-white dark:hover:bg-pink-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 animate-pulse-zoom hover:animate-none motion-reduce:animate-none"
-                            >
-                              <Handshake className="w-5 h-5 shrink-0" /> Pedir desconto nesta taxa
-                            </button>
-                            <p className="text-xs text-muted-foreground mt-1.5 leading-snug">
-                              Esta taxa é negociável: até ¥{maxAutoApprovable.toLocaleString()} de desconto sai aprovado na hora.
-                            </p>
-                          </div>
-                        )}
-                        {pointsCoverAllProducts && (
-                          <p className="text-xs text-muted-foreground mt-2 leading-snug">
-                            Esta taxa não é negociável quando o pedido é pago integralmente com pontos.
-                          </p>
-                        )}
-                        {psFeeWaived && (
-                          <p className="text-[10px] text-amber-600 dark:text-amber-500 mt-1 leading-snug">
-                            Isenção válida só para finalização imediata — se sair da página, a taxa volta a ser cobrada.
-                          </p>
-                        )}
-                        {/* Negociar frete (aparece só depois de selecionar frete e sem negociação ativa) */}
-                        {selectedShipping && !activeNeg && (
-                          <div className="flex items-center justify-between mt-2 pt-1 border-t border-border/40">
-                            <span className="text-[10px] text-muted-foreground">Negociar frete</span>
-                            <button
-                              type="button"
-                              onClick={() => setNegModalType('shipping')}
-                              className="flex items-center gap-1 text-[10px] font-semibold text-primary hover:underline"
-                            >
-                              <Handshake className="w-3 h-3" /> Negociar
-                            </button>
-                          </div>
-                        )}
-                        {selectedShipping && shippingDiscountYen > 0 && (
-                          <div className="flex items-center justify-between mt-1 text-[10px] text-green-600 font-bold">
-                            <span>Desconto frete</span>
-                            <span>-{formatPrice(shippingDiscountDisplay, currency)}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* EUA: imposto pré-pago pela loja (DDP), dentro do total. */}
-                    {shown.importDuty > 0 && (
-                      <div className="pt-2 border-t border-border/60">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Imposto de importação EUA (pré-pago)</span>
-                          <span className="font-semibold text-gray-800">{formatPrice(shown.importDuty, currency)}</span>
-                        </div>
-                        <p className="text-[10px] text-muted-foreground mt-1 leading-snug">
-                          Envio DDP: o imposto é pago pela loja antes da postagem. Nada é cobrado na entrega.
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="flex justify-between pt-2 border-t border-border font-bold items-start">
-                      <span className="text-sm">Total a pagar</span>
-                      <div className="text-right">
-                        {totalSavings > 0 && (
-                          <p className="text-xs text-muted-foreground line-through font-normal">
-                            {formatPrice(grandTotal + totalSavings, currency, anyLocal)}
-                          </p>
-                        )}
-                        <span className="text-base text-pink-600">
-                          {formatPrice(grandTotal, currency, anyLocal)}
-                        </span>
-                        {totalSavings > 0 && (
-                          <p className="text-[10px] text-green-600 font-bold mt-0.5">
-                            Você economiza {formatPrice(totalSavings, currency, anyLocal)}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-            </div>
+            <CheckoutOrderSummary
+              split={split}
+              setShipChoiceOpen={setShipChoiceOpen}
+              localKind={localKind}
+              mixedOrder={mixedOrder}
+              formData={formData}
+              items={items}
+              unitDisplayOf={unitDisplayOf}
+              isLocalItem={isLocalItem}
+              currency={currency}
+              appliedCoupon={appliedCoupon}
+              regularSubtotalForCoupon={regularSubtotalForCoupon}
+              couponDiscount={couponDiscount}
+              discountedItemCount={discountedItemCount}
+              handleCouponApply={handleCouponApply}
+              handleCouponRemove={handleCouponRemove}
+              isAuthenticated={isAuthenticated}
+              isGuest={isGuest}
+              canRedeem={canRedeem}
+              availablePoints={availablePoints}
+              maxRedeemable={maxRedeemable}
+              pointsToUse={pointsToUse}
+              setPointsToUse={setPointsToUse}
+              redeemPoints={redeemPoints}
+              shown={shown}
+              anyLocal={anyLocal}
+              pointsDiscount={pointsDiscount}
+              estimatedTax={estimatedTax}
+              taxLabel={taxLabel}
+              localShippingValue={localShippingValue}
+              localOrder={localOrder}
+              selectedShipping={selectedShipping}
+              actualShippingCost={actualShippingCost}
+              totalQty={totalQty}
+              effectivePsFeeDiscountYen={effectivePsFeeDiscountYen}
+              psFeeYen={psFeeYen}
+              psFeeOriginalDisplay={psFeeOriginalDisplay}
+              psFeeFinalYen={psFeeFinalYen}
+              psFeeDisplay={psFeeDisplay}
+              psFeeQty={psFeeQty}
+              psFeeWaived={psFeeWaived}
+              negIsApproved={negIsApproved}
+              activeNeg={activeNeg}
+              negIsPending={negIsPending}
+              negIsRejected={negIsRejected}
+              negActuallyExpired={negActuallyExpired}
+              pointsCoverAllProducts={pointsCoverAllProducts}
+              setNegModalType={setNegModalType}
+              maxAutoApprovable={maxAutoApprovable}
+              shippingDiscountYen={shippingDiscountYen}
+              shippingDiscountDisplay={shippingDiscountDisplay}
+              totalSavings={totalSavings}
+              grandTotal={grandTotal}
+            />
           </div>
         </div>
       </section>
