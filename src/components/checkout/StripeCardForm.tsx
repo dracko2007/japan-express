@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
-import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { Button } from '@/components/ui/button';
 import { AlertCircle, CreditCard, Loader2 } from 'lucide-react';
-
-const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string | undefined;
-const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
+import { stripePromise } from '@/lib/stripeClient';
+import { paymentReturnUrl } from '@/utils/paymentReturn';
 
 // Carteiras (Apple Pay / Google Pay = "tocar para pagar" por NFC) só no celular:
 // no computador o cliente digita o cartão. Celular = UA móvel + toque como ponteiro principal.
@@ -19,9 +17,11 @@ function isSmartphone(): boolean {
 interface StripeCardFormProps {
   clientSecret: string;
   onSuccess: () => void;
+  /** Número do pedido: vai no endereço de retorno para a página saber de qual pedido se trata. */
+  orderId?: string;
 }
 
-const CheckoutForm: React.FC<Pick<StripeCardFormProps, 'onSuccess'>> = ({ onSuccess }) => {
+const CheckoutForm: React.FC<Pick<StripeCardFormProps, 'onSuccess' | 'orderId'>> = ({ onSuccess, orderId }) => {
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
@@ -33,7 +33,8 @@ const CheckoutForm: React.FC<Pick<StripeCardFormProps, 'onSuccess'>> = ({ onSucc
     if (!stripe || !elements) return;
     setSubmitting(true);
     setError('');
-    const result = await stripe.confirmPayment({ elements, redirect: 'if_required' });
+    // `if_required`: cartão e carteiras terminam aqui mesmo; Klarna, MB WAY, Scalapay etc. saem do site e voltam pelo `return_url`.
+    const result = await stripe.confirmPayment({ elements, redirect: 'if_required', confirmParams: { return_url: paymentReturnUrl(orderId) } });
     if (result.error) {
       setError(result.error.message || 'Não foi possível processar o pagamento.');
       setSubmitting(false);
@@ -64,7 +65,7 @@ const CheckoutForm: React.FC<Pick<StripeCardFormProps, 'onSuccess'>> = ({ onSucc
   );
 };
 
-const StripeCardForm: React.FC<StripeCardFormProps> = ({ clientSecret, onSuccess }) => {
+const StripeCardForm: React.FC<StripeCardFormProps> = ({ clientSecret, onSuccess, orderId }) => {
   if (!stripePromise) {
     return <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">Pagamento com cartão ainda não configurado.</div>;
   }
@@ -73,7 +74,7 @@ const StripeCardForm: React.FC<StripeCardFormProps> = ({ clientSecret, onSuccess
   }
   return (
     <Elements stripe={stripePromise} options={{ clientSecret }}>
-      <CheckoutForm onSuccess={onSuccess} />
+      <CheckoutForm onSuccess={onSuccess} orderId={orderId} />
     </Elements>
   );
 };

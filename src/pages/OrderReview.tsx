@@ -1,7 +1,5 @@
 import { safeStorage } from '@/utils/storage';
-import { recoveryCouponState } from '@/utils/recoveryCouponState';
 import React, { useState, useEffect, useMemo } from 'react';
-import { emailServiceSimple } from '@/services/emailServiceSimple';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Printer, CreditCard, Landmark, Smartphone, CheckCircle, Copy, AlertCircle, ExternalLink, Wallet as WalletIcon, X } from 'lucide-react';
 import { couponService as globalCouponService } from '@/services/couponService';
@@ -18,13 +16,14 @@ import { formatPrice, getCurrencyByCountry } from '@/utils/currency';
 import { effectiveYen } from '@/utils/pricing';
 import { convertYen as fxConvert, getRatesId } from '@/services/fxService';
 import { cartBenefits, computeCheckoutTotals } from '@/utils/checkoutTotals';
-import { localOffer, setShipAllFromJapan, splitCart } from '@/utils/localStock';
+import { localOffer, splitCart } from '@/utils/localStock';
 import { psFeeWaiver } from '@/utils/psFeeWaiver';
+import { pendingCheckout } from '@/utils/pendingCheckout';
+import { useFinalizeOrder } from '@/hooks/useFinalizeOrder';
 import { earnedPointsForOrder, POINTS, pointsMultiplierForSpend } from '@/services/pointsService';
 import { recentProductSpendYen } from '@/utils/loyaltySpend';
 import { paymentSettingsService } from '@/services/paymentSettingsService';
 import { calcImportTax } from '@/utils/taxRules';
-import { thermalPrintService } from '@/services/thermalPrintService';
 import StripeCardForm from '@/components/checkout/StripeCardForm';
 import {
   CheckoutError,
@@ -49,7 +48,7 @@ const devError = isDev ? console.error.bind(console) : () => {};
 
 
 const OrderReview: React.FC = () => {
-  const { selectedItems: items, removePurchasedItems } = useCart();
+  const { selectedItems: items } = useCart();
   const { refresh: refreshProducts } = useProducts();
   const { consumeCouponByCode, user, addPoints, addOrder, addCoupon, orders } = useUser();
   const [pointsToUse, setPointsToUse] = useState<number>(() => {
@@ -78,6 +77,7 @@ const OrderReview: React.FC = () => {
   const shippingDiscountYen: number = location.state?.shippingDiscountYen || 0;
   const negotiationId: string | null = location.state?.negotiationId || null;
   const isGuest: boolean = !!location.state?.isGuest;
+  const finalizeOrder = useFinalizeOrder();
   // Pedido de estoque local: preço fixo na moeda do cliente + frete nacional (vem do checkout).
   const localOrder: boolean = location.state?.fulfillment === 'local';
   // 'local' = tudo sai do país do cliente; 'mixed' = parte de lá e parte do Japão (um pedido, dois envios).
@@ -358,6 +358,8 @@ const OrderReview: React.FC = () => {
       });
       if (result.order.psFeeWaiverApplied === true) psFeeWaiver.clear();
       setPendingOrder(result.order);
+      // Se o pagamento sair do site (Klarna, MB WAY...), a tela encerra a compra quando o cliente voltar.
+      pendingCheckout.save(result.order, isGuest);
       setStripeClientSecret(result.clientSecret || '');
       setPaymentModal(true);
     } catch (error) {
@@ -391,35 +393,7 @@ const OrderReview: React.FC = () => {
   // local; estoque, cupons, pontos e promoções aguardam pagamento confirmado.
   const handleFinalizeOrder = () => {
     if (!pendingOrder) return;
-
-    if (!isGuest) {
-      const existingOrders = JSON.parse(safeStorage.getItem('sakura_orders') || '[]') as AuthoritativeCheckoutOrder[];
-      const deduped = existingOrders.filter((order) => order.orderNumber !== pendingOrder.orderNumber);
-      safeStorage.setItem('sakura_orders', JSON.stringify([pendingOrder, ...deduped]));
-    }
-    if (pendingOrder.paymentMethod !== 'card') {
-      void emailServiceSimple.sendOrderConfirmation({ orderNumber: pendingOrder.orderNumber });
-    }
-    void thermalPrintService.printOrder(pendingOrder);
-
-    removePurchasedItems(); // só o que foi comprado: o que ficou desmarcado continua no carrinho
-    recoveryCouponState.clear(); // cupom de recuperação é de um pedido só: já foi usado
-    setShipAllFromJapan(false); // a escolha "tudo do Japão" vale só para o pedido que acabou de ser feito
-    safeStorage.removeItem('redeem_points');
-    safeStorage.removeItem('promo_applied');
-    safeStorage.removeItem('pending_promo');
-    safeStorage.removeItem('pending_promo_gift');
-    safeStorage.removeItem('pending_promo_points');
-    safeStorage.removeItem('promo_full_price');
-    localStorage.removeItem('activeNegId');
-    psFeeWaiver.clear();
-
-    navigate('/order-confirmation', {
-      state: {
-        order: pendingOrder,
-        isGuest,
-      },
-    });
+    finalizeOrder(pendingOrder, isGuest);
   };
 
   return (
@@ -738,6 +712,7 @@ const OrderReview: React.FC = () => {
                     <StripeCardForm
                       clientSecret={stripeClientSecret}
                       onSuccess={handleFinalizeOrder}
+                      orderId={pendingOrder.orderNumber}
                     />
                   </div>
                 )}

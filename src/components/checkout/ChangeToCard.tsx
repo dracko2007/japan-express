@@ -33,7 +33,7 @@ const ChangeToCard: React.FC<ChangeToCardProps> = ({ orderId, onPaid }) => {
     return (
       <div className="space-y-3 rounded-2xl border border-pink-200 bg-pink-50/40 p-4 text-left">
         <p className="text-sm font-semibold">Pagar este pedido com cartão</p>
-        <StripeCardForm clientSecret={clientSecret} onSuccess={onPaid} />
+        <StripeCardForm clientSecret={clientSecret} onSuccess={onPaid} orderId={orderId} />
       </div>
     );
   }
