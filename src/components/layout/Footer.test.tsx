@@ -12,7 +12,7 @@ vi.mock('@/context/LanguageContext', () => ({
   useLanguage: () => ({
     language: 'pt',
     selectedCountry: mocks.country,
-    t: (key: string) => ({ 'footer.payments': 'Formas de pagamento', 'footer.paymentSoon': 'em breve', 'footer.paymentPixViaWise': 'disponível via Wise' }[key] ?? key),
+    t: (key: string) => ({ 'footer.payments': 'Formas de pagamento', 'footer.paymentSoon': 'em breve', 'footer.paymentPixViaWise': 'disponível via Wise', 'footer.paymentMore': 'Também aceitos, conforme o seu país' }[key] ?? key),
   }),
 }));
 
@@ -47,11 +47,19 @@ describe('Footer: formas de pagamento', () => {
     expect(logo('Wise')).not.toBeInTheDocument();
   });
 
+  it('abaixo, os outros métodos do Stripe: JCB, Apple Pay, Google Pay, Link, MB WAY e Scalapay', async () => {
+    renderFooter();
+    expect(await screen.findByText('Também aceitos, conforme o seu país')).toBeInTheDocument();
+    for (const name of ['JCB', 'Apple Pay', 'Google Pay']) expect(logo(name)).toBeInTheDocument();
+    for (const text of ['Link', 'MB WAY', 'Scalapay']) expect(screen.getByText(text)).toBeInTheDocument();
+  });
+
   it('cartão e Wise desligados não são anunciados', async () => {
     mocks.settings = { cardEnabled: false, wiseEnabled: false, pixEnabled: false };
     renderFooter();
     await screen.findByRole('img', { name: 'Pix' }); // o bloco já carregou
-    for (const name of ['Visa', 'Mastercard', 'American Express', 'Diners Club', 'Wise']) expect(logo(name)).not.toBeInTheDocument();
+    for (const name of ['Visa', 'Mastercard', 'American Express', 'Diners Club', 'Wise', 'JCB', 'Apple Pay', 'Google Pay']) expect(logo(name)).not.toBeInTheDocument();
+    for (const text of ['Link', 'MB WAY', 'Scalapay']) expect(screen.queryByText(text)).not.toBeInTheDocument();
   });
 
   it('o bloco fica no contato, logo depois do WhatsApp', async () => {

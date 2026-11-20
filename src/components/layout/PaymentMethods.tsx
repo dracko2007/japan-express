@@ -38,6 +38,11 @@ const Badge: React.FC<{ icon: PaymentBrandIcon; dimmed?: boolean }> = ({ icon, d
   </li>
 );
 
+/** Método sem logo no nosso pacote: o nome em texto, num selo neutro (sem imitar a marca). */
+const TextBadge: React.FC<{ label: string }> = ({ label }) => (
+  <li className="flex h-9 min-w-[3rem] items-center justify-center rounded-md bg-white/10 px-2.5 text-xs font-semibold text-white">{label}</li>
+);
+
 /**
  * Formas de pagamento no rodapé, com os logos. Só aparece o que o checkout realmente aceita
  * (as mesmas configurações que o checkout lê). Pix: próprio (quando ligado), "via Wise" (o Wise oferece o Pix na página de
@@ -65,6 +70,20 @@ const PaymentMethods: React.FC<PaymentMethodsProps> = ({ t, methods }) => {
       <p className="mt-2 text-xs text-accent-foreground/70">
         Pix: {methods.wiseEnabled ? t('footer.paymentPixViaWise') : t('footer.paymentSoon')}
       </p>
+    )}
+    {methods.cardEnabled && (
+      <>
+        {/* Outros métodos que o Stripe oferece no pagamento: aparecem conforme o país e o aparelho do cliente. */}
+        <p className="mb-2 mt-3 text-xs text-accent-foreground/70">{t('footer.paymentMore')}</p>
+        <ul className="flex flex-wrap items-center gap-2">
+          <Badge icon={PAYMENT_BRAND_ICONS.jcb} />
+          <Badge icon={PAYMENT_BRAND_ICONS.applepay} />
+          <Badge icon={PAYMENT_BRAND_ICONS.googlepay} />
+          <TextBadge label="Link" />
+          <TextBadge label="MB WAY" />
+          <TextBadge label="Scalapay" />
+        </ul>
+      </>
     )}
   </div>
   );

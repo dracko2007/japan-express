@@ -546,6 +546,7 @@ export const pt: Record<string, string> = {
     "footer.paymentCard": "Cartão de crédito",
     "footer.paymentSoon": "em breve",
     "footer.paymentPixViaWise": "disponível via Wise",
+    "footer.paymentMore": "Também aceitos, conforme o seu país",
     "vlog.title": "Unboxing e Testes dos Clientes",
     "vlog.description": "Confira vídeos reais de pessoas comuns recebendo suas encomendas em casa, abrindo as caixas, experimentando os snacks importados e testando a linha de cosméticos!",
     "vlog.video1.title": "Recebendo a Encomenda do Japão em Casa",
