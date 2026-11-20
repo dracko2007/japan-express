@@ -1,11 +1,9 @@
 import { safeStorage } from '@/utils/storage';
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { LogOut } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { negotiationService } from '@/services/negotiationService';
 import type { Negotiation } from '@/types/negotiation';
 import Layout from '@/components/layout/Layout';
-import { Button } from '@/components/ui/button';
 import { useUser, UserProfile, type Order } from '@/context/UserContext';
 import { useCart } from '@/context/CartContext';
 import { useToast } from '@/hooks/use-toast';
@@ -30,6 +28,9 @@ import ProfileOrderHistory from '@/components/profile/ProfileOrderHistory';
 import ProfileCoupons from '@/components/profile/ProfileCoupons';
 import ProfileAffiliatePanel from '@/components/profile/ProfileAffiliatePanel';
 import ProfilePersonalInfo from '@/components/profile/ProfilePersonalInfo';
+import ProfileShell from '@/components/profile/ProfileShell';
+import ProfileOverview from '@/components/profile/ProfileOverview';
+import { DEFAULT_SECTION, parseSection, type ProfileSection } from '@/components/profile/profileSections';
 
 const isDev = import.meta.env.DEV;
 const devLog = isDev ? console.log.bind(console) : () => {};
@@ -55,6 +56,10 @@ const Profile: React.FC = () => {
   const { products } = useProducts();
   const { addToCart, clearCart } = useCart();
   const navigate = useNavigate();
+  // Seção aberta (`/perfil?aba=pedidos`): link direto, o botão voltar funciona e recarregar mantém a seção.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const section = parseSection(searchParams.get('aba'));
+  const selectSection = (next: ProfileSection) => setSearchParams(next === DEFAULT_SECTION ? {} : { aba: next });
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [editedUser, setEditedUser] = useState<Partial<UserProfile>>(user || {});
@@ -422,109 +427,111 @@ const Profile: React.FC = () => {
 
   return (
     <Layout>
-      <div className="gradient-hero py-16">
-        <div className="container mx-auto px-4">
-          <div className="text-center">
-            <h1 className="font-display text-4xl lg:text-5xl font-bold text-foreground mb-4">
-              {t('profile.title')}
-            </h1>
-            <p className="text-muted-foreground text-lg">
-              {t('profile.subtitle')}
-            </p>
-          </div>
-        </div>
-      </div>
+      <ProfileShell
+        t={t}
+        title={t('profile.title')}
+        name={user.name || ''}
+        email={user.email || ''}
+        active={section}
+        onSelect={selectSection}
+        onLogout={handleLogout}
+        logoutLabel={t('profile.logout')}
+        badges={{ cupons: activeCoupons.length }}
+      >
+        {section === 'visao-geral' && (
+          <ProfileOverview
+            t={t}
+            points={user.points || 0}
+            ordersCount={orders.length}
+            activeCoupons={activeCoupons.length}
+            tierName={t(`profile.points.tiers.name.${tierInfo.tier.id}`)}
+            onSelect={selectSection}
+          />
+        )}
 
-      <section className="py-12 bg-background">
-        <div className="container mx-auto px-4">
-          <div className="max-w-6xl mx-auto space-y-6">
-            <ProfilePointsCard
-              t={t}
-              user={user}
-              tierInfo={tierInfo}
-            />
+        {section === 'dados' && (
+          <ProfilePersonalInfo
+            t={t}
+            isEditing={isEditing}
+            setIsEditing={setIsEditing}
+            handleSaveProfile={handleSaveProfile}
+            editedUser={editedUser}
+            handleInputChange={handleInputChange}
+            setEditedUser={setEditedUser}
+            isBrazilAddress={isBrazilAddress}
+            isJapanAddress={isJapanAddress}
+            addressCountry={addressCountry}
+            isEuropeAddress={isEuropeAddress}
+            handlePostalCodeChange={handlePostalCodeChange}
+            addressList={addressList}
+            user={user}
+            emailNews={emailNews}
+            toggleEmailNews={toggleEmailNews}
+            emailNewsBusy={emailNewsBusy}
+            updateProfile={updateProfile}
+            toast={toast}
+            pushSubscribed={pushSubscribed}
+            togglePush={togglePush}
+            pushBusy={pushBusy}
+          />
+        )}
+
+        {/* Notificações & Promoções (campanhas enviadas pelo admin) */}
+        {section === 'notificacoes' && <PromoNotificationsCard />}
+
+        {section === 'pedidos' && (
+          <ProfileOrderHistory
+            t={t}
+            ordersOffline={ordersOffline}
+            refreshOrders={refreshOrders}
+            orders={orders}
+            handleConfirmReceived={handleConfirmReceived}
+            confirmingOrderId={confirmingOrderId}
+            findProductId={findProductId}
+            user={user}
+            reviewBump={reviewBump}
+            setReviewTarget={setReviewTarget}
+            handleReorder={handleReorder}
+            ordersHasMore={ordersHasMore}
+            loadMoreOrders={loadMoreOrders}
+            ordersLoadingMore={ordersLoadingMore}
+            navigate={navigate}
+          />
+        )}
+
+        {section === 'cupons' && (
+          <ProfileCoupons
+            t={t}
+            activeCoupons={activeCoupons}
+            usedCoupons={usedCoupons}
+            expiredCoupons={expiredCoupons}
+          />
+        )}
+
+        {section === 'negociacoes' && (
+          <ProfileNegotiations
+            negotiations={negotiations}
+            navigate={navigate}
+          />
+        )}
+
+        {section === 'recompensas' && (
+          <>
+            <ProfilePointsCard t={t} user={user} tierInfo={tierInfo} />
             <SocialFollowRewards />
+          </>
+        )}
 
-            <ProfilePersonalInfo
-              t={t}
-              isEditing={isEditing}
-              setIsEditing={setIsEditing}
-              handleSaveProfile={handleSaveProfile}
-              editedUser={editedUser}
-              handleInputChange={handleInputChange}
-              setEditedUser={setEditedUser}
-              isBrazilAddress={isBrazilAddress}
-              isJapanAddress={isJapanAddress}
-              addressCountry={addressCountry}
-              isEuropeAddress={isEuropeAddress}
-              handlePostalCodeChange={handlePostalCodeChange}
-              addressList={addressList}
-              user={user}
-              emailNews={emailNews}
-              toggleEmailNews={toggleEmailNews}
-              emailNewsBusy={emailNewsBusy}
-              updateProfile={updateProfile}
-              toast={toast}
-              pushSubscribed={pushSubscribed}
-              togglePush={togglePush}
-              pushBusy={pushBusy}
-            />
-
-            <ProfileAffiliatePanel
-              isAffiliate={isAffiliate}
-              t={t}
-              affRequest={affRequest}
-              handleBecomeAffiliate={handleBecomeAffiliate}
-              requesting={requesting}
-            />
-
-            {/* Notificações & Promoções (campanhas enviadas pelo admin) */}
-            <PromoNotificationsCard />
-
-            <ProfileCoupons
-              t={t}
-              activeCoupons={activeCoupons}
-              usedCoupons={usedCoupons}
-              expiredCoupons={expiredCoupons}
-            />
-
-            <ProfileOrderHistory
-              t={t}
-              ordersOffline={ordersOffline}
-              refreshOrders={refreshOrders}
-              orders={orders}
-              handleConfirmReceived={handleConfirmReceived}
-              confirmingOrderId={confirmingOrderId}
-              findProductId={findProductId}
-              user={user}
-              reviewBump={reviewBump}
-              setReviewTarget={setReviewTarget}
-              handleReorder={handleReorder}
-              ordersHasMore={ordersHasMore}
-              loadMoreOrders={loadMoreOrders}
-              ordersLoadingMore={ordersLoadingMore}
-              navigate={navigate}
-            />
-
-            <ProfileNegotiations
-              negotiations={negotiations}
-              navigate={navigate}
-            />
-
-            {/* Logout Button */}
-            <div className="flex justify-center pt-6">
-              <Button 
-                variant="outline" 
-                onClick={handleLogout}
-                className="text-destructive hover:bg-destructive/10"
-              >
-                <LogOut className="w-4 h-4 mr-2" />
-                {t('profile.logout')}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </section>
+        {section === 'afiliado' && (
+          <ProfileAffiliatePanel
+            isAffiliate={isAffiliate}
+            t={t}
+            affRequest={affRequest}
+            handleBecomeAffiliate={handleBecomeAffiliate}
+            requesting={requesting}
+          />
+        )}
+      </ProfileShell>
 
       {reviewTarget && (
         <ReviewModal

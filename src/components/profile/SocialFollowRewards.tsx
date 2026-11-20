@@ -43,10 +43,10 @@ const SocialFollowRewards: React.FC = () => {
   const totalEarnable = networks.filter(([net]) => !followed[net]).length * SOCIAL_POINTS;
 
   return (
-    <div className="bg-card border border-border rounded-2xl p-5">
+    <div className="bg-card border border-border rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="font-bold text-foreground">{t('social.title')}</h3>
+          <h3 className="text-sm font-semibold text-foreground">{t('social.title')}</h3>
           <p className="text-sm text-muted-foreground">{t('social.desc').replace('{pts}', String(SOCIAL_POINTS))}</p>
         </div>
         {totalEarnable > 0 && (

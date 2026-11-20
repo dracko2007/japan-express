@@ -1,5 +1,5 @@
 import React from 'react';
-import { Gift } from 'lucide-react';
+
 import { Coupon } from '@/context/UserContext';
 
 interface ProfileCouponsProps {
@@ -18,19 +18,16 @@ const ProfileCoupons: React.FC<ProfileCouponsProps> = ({
   return (
     <>
     {/* Coupons */}
-    <div className="bg-card rounded-2xl border border-border p-6 lg:p-8">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-          <Gift className="w-5 h-5 text-primary" />
-        </div>
-        <h2 className="font-display text-2xl font-semibold text-foreground">
+    <div className="rounded-xl border border-border bg-card p-5">
+      <div className="flex items-center gap-3 mb-4">
+        <h2 className="font-display text-base font-semibold text-foreground">
           {t('profile.coupons.title')}
         </h2>
       </div>
 
       {activeCoupons.length > 0 ? (
         <div className="space-y-4">
-          <h3 className="font-semibold text-foreground mb-3">{t('profile.coupons.active')}</h3>
+          <h3 className="mb-3 text-sm font-semibold text-muted-foreground">{t('profile.coupons.active')}</h3>
           {activeCoupons.map((coupon) => (
             <div 
               key={coupon.id}

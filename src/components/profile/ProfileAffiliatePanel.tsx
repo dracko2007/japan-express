@@ -25,15 +25,12 @@ const ProfileAffiliatePanel: React.FC<ProfileAffiliatePanelProps> = ({
     {isAffiliate && (
       <Link
         to="/afiliado"
-        className="block bg-gradient-to-r from-primary/10 to-primary/5 rounded-2xl border border-primary/30 p-6 hover:shadow-md transition-shadow"
+        className="block rounded-xl border border-border bg-card p-5 transition-colors hover:bg-secondary/40"
       >
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-primary/15 flex items-center justify-center">
-              <Megaphone className="w-6 h-6 text-primary" />
-            </div>
             <div>
-              <h2 className="font-display text-lg font-bold text-foreground">{t('profile.affiliate.panel')}</h2>
+              <h2 className="font-display text-base font-semibold text-foreground">{t('profile.affiliate.panel')}</h2>
               <p className="text-sm text-muted-foreground">{t('profile.affiliate.panel.desc')}</p>
             </div>
           </div>
@@ -44,13 +41,10 @@ const ProfileAffiliatePanel: React.FC<ProfileAffiliatePanelProps> = ({
 
     {/* Tornar afiliado (quando ainda não é) */}
     {!isAffiliate && (
-      <div className="bg-gradient-to-r from-primary/10 to-accent/10 rounded-2xl border border-primary/30 p-6">
+      <div className="rounded-xl border border-border bg-card p-5">
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-12 h-12 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
-            <Megaphone className="w-6 h-6 text-primary" />
-          </div>
           <div>
-            <h2 className="font-display text-lg font-bold text-foreground">{t('profile.affiliate.become')}</h2>
+            <h2 className="font-display text-base font-semibold text-foreground">{t('profile.affiliate.become')}</h2>
             <p className="text-sm text-muted-foreground">{t('profile.affiliate.become.desc')}</p>
           </div>
         </div>
