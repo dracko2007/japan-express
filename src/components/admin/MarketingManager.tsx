@@ -1,3 +1,4 @@
+import { MARKETING_EXPENSES_COLLECTION, getMarketingExpenses } from '@/services/expenseReaders';
 import React, { useEffect, useState } from 'react';
 import { db } from '@/config/firebase';
 import {
@@ -22,15 +23,7 @@ export interface MarketingExpense {
 const PLATFORMS_ADS = ['Instagram Ads', 'Facebook Ads', 'TikTok Ads', 'Google Ads', 'YouTube Ads', 'Outro'];
 const PLATFORMS_INF = ['Instagram', 'TikTok', 'YouTube', 'Facebook', 'X (Twitter)', 'Outro'];
 
-const COL = 'marketing_expenses';
-
-export async function getMarketingExpenses(): Promise<MarketingExpense[]> {
-  if (!db) return [];
-  try {
-    const snap = await getDocs(query(collection(db, COL), orderBy('date', 'desc')));
-    return snap.docs.map(d => ({ id: d.id, ...d.data() } as MarketingExpense));
-  } catch { return []; }
-}
+const COL = MARKETING_EXPENSES_COLLECTION;
 
 const empty = (): Omit<MarketingExpense, 'id' | 'createdAt'> => ({
   date: new Date().toISOString().slice(0, 10),

@@ -1,3 +1,4 @@
+import { EMPLOYEE_PAYMENTS_COLLECTION, getEmployeePayments } from '@/services/expenseReaders';
 import React, { useEffect, useState } from 'react';
 import { db } from '@/config/firebase';
 import {
@@ -31,15 +32,7 @@ export interface EmployeePayment {
 }
 
 const COL_EMP = 'employees';
-const COL_PAY = 'employee_payments';
-
-export async function getEmployeePayments(): Promise<EmployeePayment[]> {
-  if (!db) return [];
-  try {
-    const snap = await getDocs(query(collection(db, COL_PAY), orderBy('date', 'desc')));
-    return snap.docs.map(d => ({ id: d.id, ...d.data() } as EmployeePayment));
-  } catch { return []; }
-}
+const COL_PAY = EMPLOYEE_PAYMENTS_COLLECTION;
 
 const emptyEmp = (): Omit<Employee, 'id' | 'createdAt'> => ({
   name: '', phone: '', birthDate: '', address: '', role: '',

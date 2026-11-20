@@ -22,7 +22,7 @@ import WelcomeCouponBanner from '@/components/WelcomeCouponBanner';
 import { useLocalCart } from '@/hooks/useLocalCart';
 import { useToast } from '@/hooks/use-toast';
 import { setShipAllFromJapan } from '@/utils/localStock';
-import { computeCouponDiscount } from '@/components/checkout/CouponSelector';
+import { computeCouponDiscount } from '@/utils/couponDiscount';
 import { recoveryErrorMessage } from '@/services/recoveryCouponService';
 import { useRecoveryLink } from '@/hooks/useRecoveryLink';
 import { taxDisclosure } from '../../shared/tax-disclosure.js';

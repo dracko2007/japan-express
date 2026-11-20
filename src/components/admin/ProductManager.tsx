@@ -200,7 +200,6 @@ const ProductManager: React.FC = () => {
       return next;
     }, { replace: true });
     // openEdit é recriado a cada render; só importa quando o id ou a lista mudam.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editParam, products, setSearchParams]);
 
   // Helpers das variantes de preço

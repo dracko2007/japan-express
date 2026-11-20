@@ -13,7 +13,7 @@ import LanguageSwitcher from '@/components/LanguageSwitcher';
 import CountrySwitcher from '@/components/CountrySwitcher';
 import JapanExpressLogo from '@/components/JapanExpressLogo';
 import { cn } from '@/lib/utils';
-import { scrollPageToTop } from '@/lib/smoothScroll';
+import { scrollPageToTop } from '@/lib/lenisInstance';
 import { restoreAndOpen, useMinimized } from '@/utils/floatingWidgets';
 import { localImage, productThumb } from '@/utils/localImage';
 import MegaMenu from './pro/MegaMenu';

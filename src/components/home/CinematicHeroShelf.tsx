@@ -6,7 +6,7 @@ import { useGSAP } from '@gsap/react';
 import { ArrowRight, ArrowDown, PlaneTakeoff, ShoppingBag, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Tilt from '@/components/Tilt';
-import { getLenis } from '@/lib/smoothScroll';
+import { getLenis } from '@/lib/lenisInstance';
 import { useLanguage } from '@/context/LanguageContext';
 import { formatPrice, getCurrencyByCountry } from '@/utils/currency';
 import { convertYen } from '@/services/fxService';

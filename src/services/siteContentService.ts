@@ -66,13 +66,15 @@ export const siteContentService = {
     try {
       const cached = localStorage.getItem(SETTINGS_LS);
       if (cached) return { ...DEFAULT_SETTINGS, ...JSON.parse(cached) };
-    } catch {}
+    } catch {
+      // Sem cache local (ou JSON inválido): cai para o Firestore ou os padrões.
+    }
     if (!db) return DEFAULT_SETTINGS;
     try {
       const snap = await getDoc(doc(db, 'siteContent', 'settings'));
       const data = snap.exists() ? (snap.data() as Partial<SiteSettings>) : {};
       const result = { ...DEFAULT_SETTINGS, ...data };
-      try { localStorage.setItem(SETTINGS_LS, JSON.stringify(result)); } catch {}
+      try { localStorage.setItem(SETTINGS_LS, JSON.stringify(result)); } catch { /* sem localStorage: só perde o cache */ }
       return result;
     } catch (e) {
       devWarn('getSettings falhou:', e);
@@ -84,7 +86,7 @@ export const siteContentService = {
     if (!db) throw new Error('Firebase indisponível');
     await ensureAdminAuth();
     await setDoc(doc(db, 'siteContent', 'settings'), { ...settings, updatedAt: serverTimestamp() }, { merge: true });
-    try { localStorage.setItem(SETTINGS_LS, JSON.stringify(settings)); } catch {}
+    try { localStorage.setItem(SETTINGS_LS, JSON.stringify(settings)); } catch { /* sem localStorage: só perde o cache */ }
   },
 
 

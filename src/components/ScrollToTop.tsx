@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { safeStorage } from '@/utils/storage';
-import { getLenis } from '@/lib/smoothScroll';
+import { getLenis } from '@/lib/lenisInstance';
 import { affiliateService } from '@/services/affiliateService';
 
 // Extrai o productId de rotas como /produto/:id ou /produto/:id?ref=CODE
