@@ -12,7 +12,7 @@ vi.mock('@/context/LanguageContext', () => ({
   useLanguage: () => ({
     language: 'pt',
     selectedCountry: mocks.country,
-    t: (key: string) => ({ 'footer.payments': 'Formas de pagamento', 'footer.paymentSoon': 'em breve', 'footer.paymentPixViaWise': 'disponível via Wise', 'footer.paymentMore': 'Também aceitos, conforme o seu país' }[key] ?? key),
+    t: (key: string) => ({ 'footer.payments': 'Formas de pagamento', 'footer.paymentSoon': 'em breve', 'footer.paymentPixViaWise': 'disponível via Wise', 'footer.paymentMore': 'Carteiras digitais, conforme o seu aparelho' }[key] ?? key),
   }),
 }));
 
@@ -47,11 +47,12 @@ describe('Footer: formas de pagamento', () => {
     expect(logo('Wise')).not.toBeInTheDocument();
   });
 
-  it('abaixo, os outros métodos do Stripe: JCB, Apple Pay, Google Pay, Link, MB WAY e Scalapay', async () => {
+  it('só mostra o que a conta do Stripe oferece: JCB entre as bandeiras e, abaixo, Apple Pay e Google Pay', async () => {
     renderFooter();
-    expect(await screen.findByText('Também aceitos, conforme o seu país')).toBeInTheDocument();
+    expect(await screen.findByText('Carteiras digitais, conforme o seu aparelho')).toBeInTheDocument();
     for (const name of ['JCB', 'Apple Pay', 'Google Pay']) expect(logo(name)).toBeInTheDocument();
-    for (const text of ['Link', 'MB WAY', 'Scalapay']) expect(screen.getByText(text)).toBeInTheDocument();
+    // métodos que a conta não oferece (ou não aparecem no pagamento) nunca são anunciados
+    for (const text of ['Link', 'MB WAY', 'Scalapay', 'Klarna']) expect(screen.queryByText(text)).not.toBeInTheDocument();
   });
 
   it('cartão e Wise desligados não são anunciados', async () => {
@@ -59,7 +60,6 @@ describe('Footer: formas de pagamento', () => {
     renderFooter();
     await screen.findByRole('img', { name: 'Pix' }); // o bloco já carregou
     for (const name of ['Visa', 'Mastercard', 'American Express', 'Diners Club', 'Wise', 'JCB', 'Apple Pay', 'Google Pay']) expect(logo(name)).not.toBeInTheDocument();
-    for (const text of ['Link', 'MB WAY', 'Scalapay']) expect(screen.queryByText(text)).not.toBeInTheDocument();
   });
 
   it('o bloco fica no contato, logo depois do WhatsApp', async () => {
