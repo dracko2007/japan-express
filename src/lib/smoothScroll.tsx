@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react';
 import Lenis from 'lenis';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { setActiveLenis } from '@/lib/lenisInstance';
 
 // ScrollTrigger é usado pelos componentes cinematográficos (CinematicHeroShelf).
 gsap.registerPlugin(ScrollTrigger);
@@ -10,22 +11,6 @@ const prefersReducedMotion = () =>
   typeof window !== 'undefined' &&
   typeof window.matchMedia === 'function' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-let activeLenis: Lenis | null = null;
-
-/**
- * Instância ativa do Lenis, para scroll programático que respeita o smooth
- * scroll (ex.: autoplay do CinematicHeroShelf). `null` quando o Lenis não
- * está rodando (prefers-reduced-motion).
- */
-export const getLenis = () => activeLenis;
-
-/** Volta ao topo da página com scroll suave (respeita o Lenis quando ativo). */
-export function scrollPageToTop() {
-  const lenis = activeLenis;
-  if (lenis) lenis.scrollTo(0);
-  else window.scrollTo({ top: 0, behavior: 'smooth' });
-}
 
 /**
  * SmoothScroll
@@ -50,7 +35,7 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
       touchMultiplier: 1.4,
     });
 
-    activeLenis = lenis;
+    setActiveLenis(lenis);
     lenis.on('scroll', ScrollTrigger.update);
 
     const raf = (time: number) => lenis.raf(time * 1000);
@@ -67,7 +52,7 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
       window.clearTimeout(t);
       window.removeEventListener('load', refresh);
       gsap.ticker.remove(raf);
-      activeLenis = null;
+      setActiveLenis(null);
       lenis.destroy();
     };
   }, []);

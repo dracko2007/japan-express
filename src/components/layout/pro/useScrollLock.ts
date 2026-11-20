@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { getLenis } from '@/lib/smoothScroll';
+import { getLenis } from '@/lib/lenisInstance';
 
 /**
  * Trava o scroll da página enquanto um overlay está aberto. O Lenis ignora

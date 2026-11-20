@@ -6,7 +6,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { useUser } from '@/context/UserContext';
 import { cn } from '@/lib/utils';
 import { CART_KICK } from './flyToCart';
-import { scrollPageToTop } from '@/lib/smoothScroll';
+import { scrollPageToTop } from '@/lib/lenisInstance';
 
 interface Props {
   cartCount: number;

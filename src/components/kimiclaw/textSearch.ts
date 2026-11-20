@@ -20,7 +20,7 @@ export const STOP_WORDS = new Set([
 // Quebra a busca em palavras úteis (ignora ligação e palavras curtas)
 export const tokenize = (query: string): string[] =>
   normalizeText(query)
-    .split(/[\s,.;:!?'"()/_\-]+/)
+    .split(/[\s,.;:!?'"()/_-]+/)
     .map((t) => t.trim())
     .filter((t) => t.length >= 2 && !STOP_WORDS.has(t));
 

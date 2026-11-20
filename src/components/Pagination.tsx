@@ -30,7 +30,7 @@ const Pagination: React.FC<PaginationProps> = ({
   const pages: number[] = [];
   const windowSize = 5;
   let start = Math.max(1, page - Math.floor(windowSize / 2));
-  let end = Math.min(totalPages, start + windowSize - 1);
+  const end = Math.min(totalPages, start + windowSize - 1);
   start = Math.max(1, end - windowSize + 1);
   for (let i = start; i <= end; i++) pages.push(i);
 

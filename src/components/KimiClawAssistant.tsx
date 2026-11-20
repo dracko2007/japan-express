@@ -612,7 +612,7 @@ const KimiClawAssistant: React.FC = () => {
         if (keywordTokens.length > 0 && !keywordExistsInCatalog) {
           const kw = keywordTokens.map((k) => `**${k}**`).join(', ');
           await addKimiMessageWithTyping(
-            `Procurei no catálogo por ${kw} com frete pra **${country}** dentro de **${fmtBudget(budgetValue)}**, mas não tenho esse item em estoque agora. 😕\n\nSem problema! 🎌 Você pode **encomendar** pelo **\"Faça seu Pedido\"** no menu do topo — é só mandar o link/foto do shampoo japonês que você quer que a equipe cotiza o preço + frete pra você. 📦`,
+            `Procurei no catálogo por ${kw} com frete pra **${country}** dentro de **${fmtBudget(budgetValue)}**, mas não tenho esse item em estoque agora. 😕\n\nSem problema! 🎌 Você pode **encomendar** pelo **"Faça seu Pedido"** no menu do topo — é só mandar o link/foto do shampoo japonês que você quer que a equipe cotiza o preço + frete pra você. 📦`,
             ['🔍 Procurando no catálogo...']
           );
           setTimeout(() => navigate('/faca-seu-pedido'), 700);

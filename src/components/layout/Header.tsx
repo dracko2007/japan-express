@@ -7,7 +7,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { useProducts } from '@/context/ProductsContext';
 import { categoryService, DEFAULT_CATEGORIES, type ProductCategory } from '@/services/categoryService';
 import { cn } from '@/lib/utils';
-import { scrollPageToTop } from '@/lib/smoothScroll';
+import { scrollPageToTop } from '@/lib/lenisInstance';
 import { Button } from '@/components/ui/button';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import CountrySwitcher from '@/components/CountrySwitcher';

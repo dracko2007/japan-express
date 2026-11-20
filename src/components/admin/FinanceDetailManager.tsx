@@ -23,9 +23,9 @@ import { useConfirm } from '@/components/ConfirmDialog';
 import { authenticatedFetch } from '@/services/authenticatedFetch';
 import { affiliateService } from '@/services/affiliateService';
 import type { Affiliate, PendingCommission } from '@/services/affiliateService';
-import { getMarketingExpenses } from '@/components/admin/MarketingManager';
+import { getMarketingExpenses, getFinanceExpenses, FINANCE_EXPENSES_COLLECTION } from '@/services/expenseReaders';
 import type { MarketingExpense } from '@/components/admin/MarketingManager';
-import { getEmployeePayments } from '@/components/admin/EmployeeManager';
+import { getEmployeePayments } from '@/services/expenseReaders';
 import type { EmployeePayment } from '@/components/admin/EmployeeManager';
 import { getRates, loadFxRates, convertYen, yenFromConverted, getRateSource } from '@/services/fxService';
 import { getAirParcelRate, getEmsRate } from '@/utils/japanPostRates';
@@ -59,17 +59,7 @@ export interface FinanceExpense {
   createdAt?: string;
 }
 
-const EXPENSE_COL = 'finance_expenses';
-
-export async function getFinanceExpenses(): Promise<FinanceExpense[]> {
-  if (!db) return [];
-  try {
-    const snap = await getDocs(query(collection(db, EXPENSE_COL), orderBy('date', 'desc')));
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FinanceExpense));
-  } catch {
-    return [];
-  }
-}
+const EXPENSE_COL = FINANCE_EXPENSES_COLLECTION;
 
 const emptyExpense = (): Omit<FinanceExpense, 'id' | 'createdAt'> => ({
   date: new Date().toISOString().slice(0, 10),
