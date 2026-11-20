@@ -21,6 +21,11 @@ describe('parseArgv', () => {
     });
   });
 
+  it('--offset é número', () => {
+    expect(parseArgv(['products', 'list', '--limit', '100', '--offset', '200']).args).toEqual({ limit: 100, offset: 200 });
+    expect(() => parseArgv(['products', 'list', '--offset', 'x'])).toThrow(UsageError);
+  });
+
   it('argumentos posicionais e apelidos', () => {
     expect(parseArgv(['orders', 'set-status', 'JE-1', 'shipped']).args).toEqual({ orderNumber: 'JE-1', status: 'shipped' });
     expect(parseArgv(['orders', 'set-tracking', 'JE-1', '--number', 'AB1', '--carrier', 'Yamato', '--url=https://x.y']).args)

@@ -23,6 +23,8 @@ npm run je -- products update ID --discount 10
 npm run je -- customers delete a@b.com --yes
 npm run je -- help
 ```
+Listas (`orders`, `customers`, `products list`) mostram até 100 por vez e respondem `total` e `hasMore`; use `--offset 100`, `--offset 200`… para as próximas. O servidor lê até 3.000 documentos por consulta (`truncated: true` avisa se passar disso).
+
 `JE_API_URL` muda o endereço (padrão `https://www.japanexpress-store.com`; só https).
 Saída: 0 ok · 1 erro do servidor · 2 uso incorreto · 3 falta confirmação (`--yes`).
 
