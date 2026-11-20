@@ -405,6 +405,14 @@ try {
   await fails(setDoc(doc(userDb, 'wishlists', 'u1'), { items: [], updatedAt: serverTimestamp(), points: 999 }), 'wishlist rejects extra fields');
   await fails(setDoc(doc(userDb, 'wishlists', 'u1'), { items: Array.from({ length: 201 }, () => favorito), updatedAt: serverTimestamp() }), 'wishlist capped at 200 items');
   await fails(setDoc(doc(userDb, 'wishlists', 'u1'), { items: [], updatedAt: new Date('2020-01-01') }), 'wishlist requires server timestamp');
+  // Chaves de API da CLI: só o servidor (Admin SDK) toca. Nem o admin do painel lê o resumo da chave ou o registro.
+  for (const collection of ['api_keys', 'api_key_audit']) {
+    await fails(getDoc(doc(adminDb, collection, 'x')), `admin client cannot read ${collection}`);
+    await fails(setDoc(doc(adminDb, collection, 'x'), { scopes: ['read'] }), `admin client cannot write ${collection}`);
+    await fails(getDoc(doc(userDb, collection, 'x')), `user cannot read ${collection}`);
+    await fails(getDoc(doc(anonymousDb, collection, 'x')), `anonymous cannot read ${collection}`);
+  }
+
   console.log(`Firestore rules preflight passed: ${checks} checks`);
 } finally {
   await environment.cleanup();

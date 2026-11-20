@@ -12,7 +12,10 @@ import {
   sendError,
 } from './_lib/http.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
-import { buildDashboardAnalytics, couponRow, matchesCouponFilters, orderEpoch } from './_lib/order-analytics.js';
+import { deleteCustomerLogin } from './_lib/customer-accounts.js';
+import { createApiKey, listApiKeys, revokeApiKey } from './_lib/api-keys.js';
+import handleCli from './_handlers/cli.js';
+import { buildDashboardAnalytics, couponRow, matchesCouponFilters, orderEpoch, ORDER_FIELDS } from './_lib/order-analytics.js';
 
 // ── admin-dashboard.js ───────────────────────────────────────────────
 // Nomes reais gravados por `api/orders.js` (ver `handleCreate`/`publicOrder`):
@@ -21,11 +24,6 @@ import { buildDashboardAnalytics, couponRow, matchesCouponFilters, orderEpoch } 
 // ¥; `shippingCost` e `psFeeFinalYen` nunca existiram — os campos reais são
 // `shippingCostYen`/`shipping.cost` e `psFeeYen`. Ver `order-analytics.js`
 // (`orderRevenueYen`/`orderShippingYen`) para como cada um é lido.
-const ORDER_FIELDS = [
-  'orderDate', 'date', 'syncedAt', 'status', 'paymentMethod', 'currency',
-  'totalYen', 'grandTotalYen', 'totalPrice', 'totalAmount', 'shippingCostYen', 'shipping',
-  'psFeeYen', 'couponDiscountYen', 'redeemPoints', 'items',
-];
 
 async function handleDashboard(req, res) {
   if (!handleCors(req, res, { methods: ['GET'] })) return;
@@ -482,30 +480,43 @@ async function handleCustomerDelete(req, res) {
     });
     const body = parseJsonObject(req.body);
     assertExactKeys(body, ['email']);
-    const email = normalizeEmail(body.email);
-    if (!email) throw new HttpError(400, 'invalid_request');
-    if (email === superAdminEmail().toLowerCase()) throw new HttpError(403, 'cannot_delete_super_admin');
-
-    let record;
-    try {
-      record = await adminAuth().getUserByEmail(email);
-    } catch (error) {
-      // Sem login para esse e-mail: nada a apagar (a exclusão do perfil continua valendo).
-      if (error?.code === 'auth/user-not-found') {
-        res.status(200).json({ ok: true, deleted: false });
-        return;
-      }
-      throw error;
-    }
-    // Esta rota é de CLIENTE: conta de administrador sai só pelo gerenciador de admins.
-    if (record.uid === adminUser.uid) throw new HttpError(403, 'cannot_delete_self');
-    if (record.uid.startsWith('admin_') || record.customClaims?.admin) throw new HttpError(403, 'cannot_delete_admin');
-
-    await adminAuth().revokeRefreshTokens(record.uid).catch(() => undefined);
-    await adminAuth().deleteUser(record.uid);
-    res.status(200).json({ ok: true, deleted: true });
+    const { deleted } = await deleteCustomerLogin({ email: body.email, actingUid: adminUser.uid });
+    res.status(200).json({ ok: true, deleted });
   } catch (error) {
     console.error('[admin-customer-delete]', error instanceof Error ? error.message : error);
+    sendError(res, error);
+  }
+}
+
+// ── admin-api-keys.js ───────────────────────────────────────────────
+// Chaves da CLI (`scripts/cli`). Só gerente (nível 3). O texto da chave aparece UMA vez, na criação.
+async function handleApiKeys(req, res) {
+  if (!handleCors(req, res, { methods: ['GET', 'POST', 'DELETE'] })) return;
+  try {
+    const manager = await requireManager(req);
+    await enforceRateLimit(req, {
+      scope: `admin-api-keys:${req.method}`,
+      limit: req.method === 'GET' ? 120 : 20,
+      windowMs: 60 * 60 * 1000,
+      identity: manager.uid,
+    });
+    res.setHeader('Cache-Control', 'private, no-store');
+
+    if (req.method === 'GET') {
+      res.status(200).json({ ok: true, keys: await listApiKeys() });
+      return;
+    }
+    const body = parseJsonObject(req.body);
+    if (req.method === 'POST') {
+      assertExactKeys(body, ['name', 'scopes', 'days']);
+      const created = await createApiKey({ name: body.name, scopes: body.scopes, days: body.days, createdBy: manager.email || manager.uid });
+      res.status(201).json({ ok: true, ...created });
+      return;
+    }
+    assertExactKeys(body, ['id']);
+    res.status(200).json({ ok: true, ...(await revokeApiKey(requiredText(body.id, { max: 64 }))) });
+  } catch (error) {
+    console.error('[admin-api-keys]', error instanceof Error ? error.message : error);
     sendError(res, error);
   }
 }
@@ -519,7 +530,9 @@ export default async function handler(req, res) {
   if (action === 'users') return handleUsers(req, res);
   if (action === 'customers-verification') return handleCustomerVerification(req, res);
   if (action === 'customer-delete') return handleCustomerDelete(req, res);
+  if (action === 'api-keys') return handleApiKeys(req, res);
+  if (action === 'cli') return handleCli(req, res);
   return res.status(400).json({ error: 'invalid_action' });
 }
 
-export { handleDashboard, handleCouponUsage, handleSession, handleUsers, handleCustomerVerification, handleCustomerDelete };
+export { handleDashboard, handleCouponUsage, handleSession, handleUsers, handleCustomerVerification, handleCustomerDelete, handleApiKeys, handleCli };
