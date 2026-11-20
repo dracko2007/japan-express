@@ -275,7 +275,7 @@ describe('comandos de leitura', () => {
   it('whoami e health', async () => {
     expect((await run(key, 'whoami')).body.result.scopes).toEqual(['read']);
     const h = (await run(key, 'health')).body.result;
-    expect(h).toMatchObject({ ok: true, orders: 2, products: 1 });
+    expect(h).toMatchObject({ ok: true, orders: 2, products: { active: 1, hidden: 0, deleted: 0, documents: 1 } });
   });
 
   it('orders.list: mais recentes primeiro, filtro por status, busca e limite', async () => {
@@ -304,6 +304,21 @@ describe('comandos de leitura', () => {
     for (let offset = 0; offset < 1100; offset += 100) (await run(key, 'products.list', { category: 'doces', limit: 100, offset })).body.result.products.forEach((p) => ids.add(p.id));
     expect(ids.size).toBe(1100); // sem repetir nem pular
     expect((await run(key, 'products.list', { offset: -1 })).statusCode).toBe(400);
+  });
+
+  it('products: health separa ativos, ocultos e apagados; a listagem esconde os apagados', async () => {
+    const { key } = await newKey(['read']);
+    Object.assign(mocks.db.col('products'), {
+      oculto: { name: 'Oculto', hidden: true },
+      lapide: { name: 'Apagado', __deleted: true },
+      lapideOculta: { name: 'Apagado e oculto', hidden: true, __deleted: true },
+    });
+    const total = Object.keys(mocks.db.col('products')).length;
+    const { products } = (await run(key, 'health')).body.result;
+    expect(products).toEqual({ active: total - 3, hidden: 1, deleted: 2, documents: total });
+    const ids = (await run(key, 'products.list')).body.result.products.map((p) => p.id);
+    expect(ids).not.toContain('lapide');
+    expect((await run(key, 'products.list', { deleted: true })).body.result.products.map((p) => p.id).sort()).toEqual(['lapide', 'lapideOculta']);
   });
 
   it('products.list e products.get (com o custo vindo de productCosts)', async () => {

@@ -126,7 +126,14 @@ export const COMMANDS = {
     help: 'Confere o servidor e conta pedidos, clientes, produtos e cupons.',
     async run({ db }) {
       const count = async (name) => (await db.collection(name).count().get()).data().count;
-      const [orders, users, products, coupons] = await Promise.all(['orders', 'users', 'products', 'coupons'].map(count));
+      const [orders, users, coupons, catalog] = await Promise.all([
+        count('orders'), count('users'), count('coupons'), db.collection('products').select('hidden', '__deleted').get(),
+      ]);
+      // `__deleted` é a lápide do apagar do painel: o documento continua no banco, mas não é produto.
+      const rows = catalog.docs.map((d) => d.data());
+      const deleted = rows.filter((p) => p.__deleted === true).length;
+      const hidden = rows.filter((p) => p.__deleted !== true && p.hidden === true).length;
+      const products = { active: rows.length - deleted - hidden, hidden, deleted, documents: rows.length };
       return { ok: true, orders, customers: users, products, coupons, at: new Date().toISOString() };
     },
   },
@@ -214,12 +221,13 @@ export const COMMANDS = {
 
   'products.list': {
     scope: 'read',
-    help: `Produtos. Opções: category, search (nome ou id), hidden (true/false), limit (até 100), offset.`,
+    help: `Produtos. Opções: category, search (nome ou id), hidden (true/false), deleted (true: só os apagados), limit (até 100), offset. Apagados ficam de fora por padrão.`,
     async run({ db, args }) {
       const category = text(args, 'category', { required: false, max: 60 });
       const search = text(args, 'search', { required: false, max: 100 }).toLowerCase();
       const scan = await scanCollection(db, 'products');
-      let list = scan.docs;
+      const onlyDeleted = args?.deleted === true || args?.deleted === 'true';
+      let list = scan.docs.filter((p) => (p.__deleted === true) === onlyDeleted);
       if (category) list = list.filter((p) => p.category === category);
       if (search) list = list.filter((p) => includes(p.name, search) || includes(p.id, search));
       if (args?.hidden !== undefined) list = list.filter((p) => (p.hidden === true) === (args.hidden === true || args.hidden === 'true'));
