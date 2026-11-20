@@ -545,6 +545,7 @@ export const en: Record<string, string> = {
     "footer.payments": "Payment methods",
     "footer.paymentCard": "Credit card",
     "footer.paymentSoon": "coming soon",
+    "footer.paymentPixViaWise": "available via Wise",
     "vlog.title": "Unboxing & Customer Testing",
     "vlog.description": "Watch real videos of everyday people receiving their packages at home, opening the boxes, tasting imported snacks, and testing our cosmetics line!",
     "vlog.video1.title": "Receiving the Package from Japan at Home",

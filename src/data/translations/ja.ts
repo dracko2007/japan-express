@@ -478,6 +478,7 @@ export const ja: Record<string, string> = {
     "footer.payments": "お支払い方法",
     "footer.paymentCard": "クレジットカード",
     "footer.paymentSoon": "近日対応",
+    "footer.paymentPixViaWise": "Wise 経由で利用可能",
     "footer.affiliate": "アフィリエイトプログラム",
     "footer.privacy": "プライバシー",
     "footer.terms": "利用規約",
