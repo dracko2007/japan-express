@@ -154,7 +154,7 @@ export const HELP = `je — CLI do site Japan Express (usa uma chave de API de a
 
 Configuração (variáveis de ambiente):
   JE_API_KEY   a chave (je_live_...), criada no painel: Admin > Chaves de API
-  JE_API_URL   endereço do site (padrão: https://japanexpress-store.com)
+  JE_API_URL   endereço do site (padrão: https://www.japanexpress-store.com)
 
 Uso:  je <comando> [argumentos] [opções]
 

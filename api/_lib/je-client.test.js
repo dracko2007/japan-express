@@ -72,10 +72,15 @@ describe('je main', () => {
     const r = await run(['coupons', 'delete', 'X10', '--yes', '--debug']);
     expect(r.code).toBe(0);
     const [url, init] = r.fetch.mock.calls[0];
-    expect(url).toBe('https://japanexpress-store.com/api/admin?action=cli');
+    expect(url).toBe('https://www.japanexpress-store.com/api/admin?action=cli');
     expect(init.headers.Authorization).toBe(`Bearer ${KEY}`);
     expect(JSON.parse(init.body)).toEqual({ command: 'coupons.delete', args: { code: 'X10' }, confirm: true });
     expect([...r.out, ...r.err].join('\n')).not.toContain(KEY);
+  });
+
+  it('com JE_API_KEY=proxy-injected não envia Authorization (o proxy injeta)', async () => {
+    const r = await run(['health'], { env: { JE_API_KEY: 'proxy-injected' } });
+    expect(r.fetch.mock.calls[0][1].headers.Authorization).toBeUndefined();
   });
 
   it('erro do servidor: saída 1 e a chave não vaza', async () => {
@@ -88,6 +93,12 @@ describe('je main', () => {
   it('confirmação exigida pelo servidor: saída 3', async () => {
     const r = await run(['health'], { response: { ok: false, status: 409, json: async () => ({ error: 'confirmation_required' }) } });
     expect(r.code).toBe(3);
+  });
+
+  it('redirecionamento: não segue (perderia a chave) e avisa', async () => {
+    const r = await run(['health'], { response: { ok: false, status: 308, headers: { get: () => 'https://outro.site/x' }, json: async () => ({}) } });
+    expect(r.code).toBe(1);
+    expect(r.err.join('')).toContain('JE_API_URL');
   });
 
   it('falha de rede: saída 1', async () => {

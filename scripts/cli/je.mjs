@@ -31,7 +31,7 @@ export async function main(argv, deps = {}) {
     err('Falta a chave de API. Defina JE_API_KEY (crie em: Admin > Chaves de API).');
     return EXIT.usage;
   }
-  const base = String(env.JE_API_URL || 'https://japanexpress-store.com').replace(/\/+$/, '');
+  const base = String(env.JE_API_URL || 'https://www.japanexpress-store.com').replace(/\/+$/, '');
   if (!/^https:\/\//i.test(base) && !/^http:\/\/(localhost|127\.0\.0\.1)/i.test(base)) {
     err('JE_API_URL precisa ser https:// (a chave não pode viajar sem criptografia).');
     return EXIT.usage;
@@ -50,12 +50,18 @@ export async function main(argv, deps = {}) {
   try {
     response = await doFetch(`${base}/api/admin?action=cli`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      headers: { 'Content-Type': 'application/json', ...(key === 'proxy-injected' ? {} : { Authorization: `Bearer ${key}` }) }, // 'proxy-injected': um proxy de saída coloca a chave
       body: JSON.stringify(body),
+      redirect: 'manual', // o fetch descarta o Authorization ao trocar de host: melhor falhar claro
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch (error) {
     err(`Não consegui falar com o site (${error?.name === 'TimeoutError' ? 'demorou mais de 30 s' : error?.message || error}).`);
+    return EXIT.server;
+  }
+
+  if (response.status >= 300 && response.status < 400) {
+    err(`O site redirecionou (${response.status}) para ${response.headers?.get?.('location') || 'outro endereço'}. Ajuste JE_API_URL para o endereço final.`);
     return EXIT.server;
   }
 

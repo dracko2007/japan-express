@@ -23,7 +23,7 @@ npm run je -- products update ID --discount 10
 npm run je -- customers delete a@b.com --yes
 npm run je -- help
 ```
-`JE_API_URL` muda o endereço (padrão `https://japanexpress-store.com`; só https).
+`JE_API_URL` muda o endereço (padrão `https://www.japanexpress-store.com`; só https).
 Saída: 0 ok · 1 erro do servidor · 2 uso incorreto · 3 falta confirmação (`--yes`).
 
 ## Segurança
