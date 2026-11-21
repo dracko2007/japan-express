@@ -41,6 +41,15 @@ const PAGE_LABELS: Record<string, string> = {
   '/perfil': 'Perfil',
   '/ofertas': 'Ofertas',
   '/afiliado': 'Afiliados',
+  '/privacidade': 'Privacidade',
+  '/termos': 'Termos de Uso',
+  '/cookies': 'Cookies',
+  '/devolucao': 'Devolução',
+  '/return-policy': 'Devolução',
+  '/faca-seu-pedido': 'Faça seu Pedido',
+  '/rastrear': 'Rastrear Pedido',
+  '/favoritos': 'Favoritos',
+  '/sorteio': 'Sorteio',
 };
 
 export interface DailyStats {
