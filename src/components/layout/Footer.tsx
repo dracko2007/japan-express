@@ -111,6 +111,7 @@ const Footer: React.FC = () => {
               </a>
               <a
                 href={`mailto:${CONTACT_EMAIL}`}
+                aria-label="E-mail"
                 className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors"
               >
                 <Mail className="w-5 h-5" />
@@ -120,7 +121,7 @@ const Footer: React.FC = () => {
 
           {/* Links */}
           <div>
-            <h4 className="font-display font-semibold mb-4">{t('footer.links')}</h4>
+            <h4 aria-level={2} className="font-display font-semibold mb-4">{t('footer.links')}</h4>
             <ul className="space-y-0.5">
               <li>
                 <Link to="/produtos" className="inline-flex min-h-[44px] items-center text-sm text-accent-foreground/90 hover:text-accent-foreground transition-colors">
@@ -173,7 +174,7 @@ const Footer: React.FC = () => {
 
           {/* Contact */}
           <div>
-            <h4 className="font-display font-semibold mb-4">{t('footer.contact')}</h4>
+            <h4 aria-level={2} className="font-display font-semibold mb-4">{t('footer.contact')}</h4>
             <div className="space-y-1">
               <div className="flex items-start gap-2 pb-2">
                 <MapPin className="w-4 h-4 mt-0.5 text-accent-foreground/90" />

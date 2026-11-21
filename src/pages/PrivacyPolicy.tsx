@@ -22,7 +22,7 @@ const PrivacyPolicy: React.FC = () => (
               Lei nº 13.709/2018).
             </p>
             <p className="mt-2">
-              Contato do responsável pelos dados: <a href={`mailto:${COMPANY_PROFILE.email}`} className="text-primary hover:underline">{COMPANY_PROFILE.email}</a>
+              Contato do responsável pelos dados: <a href={`mailto:${COMPANY_PROFILE.email}`} className="text-pink-700 underline underline-offset-2 hover:text-pink-800">{COMPANY_PROFILE.email}</a>
             </p>
           </section>
 
@@ -87,7 +87,7 @@ const PrivacyPolicy: React.FC = () => (
               <li>Revogar o consentimento previamente dado para cookies analíticos.</li>
             </ul>
             <p className="mt-3">
-              Para exercer seus direitos, entre em contato via e-mail em <a href={`mailto:${COMPANY_PROFILE.email}`} className="text-primary hover:underline">{COMPANY_PROFILE.email}</a>.
+              Para exercer seus direitos, entre em contato via e-mail em <a href={`mailto:${COMPANY_PROFILE.email}`} className="text-pink-700 underline underline-offset-2 hover:text-pink-800">{COMPANY_PROFILE.email}</a>.
               Responderemos em até 15 dias úteis.
             </p>
           </section>
@@ -96,7 +96,7 @@ const PrivacyPolicy: React.FC = () => (
             <h2 className="text-xl font-semibold text-foreground mb-3">7. Cookies</h2>
             <p>
               Utilizamos cookies essenciais (necessários para o funcionamento correto do carrinho e login) e
-              cookies analíticos (somente com o seu consentimento prévio). Veja nossa <Link to="/cookies" className="text-primary hover:underline">Política de Cookies</Link> para mais detalhes.
+              cookies analíticos (somente com o seu consentimento prévio). Veja nossa <Link to="/cookies" className="text-pink-700 underline underline-offset-2 hover:text-pink-800">Política de Cookies</Link> para mais detalhes.
             </p>
           </section>
 
@@ -131,14 +131,14 @@ const PrivacyPolicy: React.FC = () => (
             <h2 className="text-xl font-semibold text-foreground mb-3">11. Contato</h2>
             <p>Para dúvidas sobre privacidade e proteção de dados:</p>
             <ul className="list-none mt-2 space-y-1">
-              <li>📧 E-mail: <a href={`mailto:${COMPANY_PROFILE.email}`} className="text-primary hover:underline">{COMPANY_PROFILE.email}</a></li>
+              <li>📧 E-mail: <a href={`mailto:${COMPANY_PROFILE.email}`} className="text-pink-700 underline underline-offset-2 hover:text-pink-800">{COMPANY_PROFILE.email}</a></li>
               <li>
                 💬 WhatsApp:{' '}
                 <a
                   href={`https://wa.me/${COMPANY_PROFILE.whatsapp.digits}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary hover:underline"
+                  className="text-pink-700 underline underline-offset-2 hover:text-pink-800"
                 >
                   {COMPANY_PROFILE.whatsapp.international}
                 </a>

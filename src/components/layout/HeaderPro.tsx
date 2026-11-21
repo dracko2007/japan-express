@@ -270,6 +270,7 @@ const HeaderPro: React.FC = () => {
               />
               <span className="flex items-baseline gap-1">
                 <span className="font-brand text-xl font-black tracking-tight text-foreground sm:text-2xl lg:text-3xl">Japan</span>
+                {' '}
                 <span className="-rotate-6 rounded-lg bg-gradient-to-r from-primary to-accent px-1.5 py-0.5 font-display text-base font-extrabold text-white shadow-md transition-transform duration-300 group-hover:rotate-0 sm:px-2 sm:text-lg lg:text-2xl">
                   Express
                 </span>
@@ -281,12 +282,13 @@ const HeaderPro: React.FC = () => {
               type="button"
               onClick={() => setSearchOpen(true)}
               className="group mx-2 hidden h-11 max-w-2xl flex-1 items-center gap-3 rounded-2xl border border-pink-100 bg-white/90 px-4 text-left text-sm text-slate-400 shadow-sm transition hover:border-pink-300 hover:shadow-lg hover:shadow-pink-100/60 md:flex"
-              aria-label={t('navPro.search')}
+              // Sem aria-label: o nome vem do texto que aparece no botão (a dica ⌘K fica de fora, com aria-hidden).
               aria-haspopup="dialog"
+              aria-keyshortcuts="Control+K Meta+K"
             >
               <Search className="h-4 w-4 text-pink-500 transition-transform group-hover:scale-110" aria-hidden />
-              <span className="flex-1 truncate">{t('navPro.searchPlaceholder')}</span>
-              <kbd className="hidden rounded-md border border-pink-100 bg-pink-50 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-pink-600 lg:inline">⌘K</kbd>
+              <span className="flex-1 truncate text-slate-500">{t('navPro.searchPlaceholder')}</span>
+              <kbd aria-hidden="true" className="hidden rounded-md border border-pink-100 bg-pink-50 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-pink-700 lg:inline">⌘K</kbd>
             </button>
 
             <div className="flex items-center gap-1 sm:gap-2">

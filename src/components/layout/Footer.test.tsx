@@ -76,4 +76,12 @@ describe('Footer: formas de pagamento', () => {
     renderFooter();
     expect(screen.queryByText('Formas de pagamento')).not.toBeInTheDocument();
   });
+
+  it('acessibilidade: o ícone do e-mail tem nome e os títulos do rodapé seguem a ordem', async () => {
+    renderFooter();
+    await screen.findByText('Formas de pagamento');
+    expect(screen.getByRole('link', { name: 'E-mail' })).toHaveAttribute('href', expect.stringMatching(/^mailto:/));
+    const titulos = screen.getAllByRole('heading', { level: 2 });
+    expect(titulos.length).toBeGreaterThanOrEqual(2); // "Links rápidos" e "Contato" no nível 2, logo depois do título da página
+  });
 });

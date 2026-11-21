@@ -96,7 +96,7 @@ const CompactProductCard: React.FC<CompactProductCardProps> = ({ product }) => {
   const openProduct = () => navigate(`/produto/${product.id}`);
 
   return (
-    <motion.article
+    <motion.div
       onClick={openProduct}
       onKeyDown={(event) => {
         if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
@@ -254,7 +254,7 @@ const CompactProductCard: React.FC<CompactProductCardProps> = ({ product }) => {
           )}
         </div>
       </div>
-    </motion.article>
+    </motion.div>
   );
 };
 
