@@ -81,7 +81,7 @@ const TermsOfService: React.FC = () => (
               <li><strong>Condição obrigatória:</strong> por se tratar de importação de itens de uso pessoal, o produto deve estar completamente lacrado, na embalagem original, sem uso e sem avarias. Produtos alimentícios e cosméticos com embalagem aberta ou violada não são elegíveis para devolução por razões de segurança sanitária.</li>
               <li>Em caso de desistência ou arrependimento, o custo do frete de retorno é de responsabilidade do cliente. Em casos comprovados de produto com defeito de fabricação ou erro no envio cometido pela loja, o frete de devolução será custeado pela Japan Express.</li>
               <li>Para iniciar o processo, entre em contato via WhatsApp ou e-mail com foto do produto.</li>
-              <li>As condições completas, incluindo o processo de reembolso e o que não é reembolsável, estão na <Link to="/devolucao" className="text-primary hover:underline">Política de Devolução</Link>, que prevalece em caso de divergência com este resumo.</li>
+              <li>As condições completas, incluindo o processo de reembolso e o que não é reembolsável, estão na <Link to="/devolucao" className="text-pink-700 underline underline-offset-2 hover:text-pink-800">Política de Devolução</Link>, que prevalece em caso de divergência com este resumo.</li>
             </ul>
           </section>
 
@@ -116,14 +116,14 @@ const TermsOfService: React.FC = () => (
           <section>
             <h2 className="text-xl font-semibold text-foreground mb-3">11. Contato</h2>
             <ul className="list-none space-y-1">
-              <li>📧 E-mail: <a href={`mailto:${COMPANY_PROFILE.email}`} className="text-primary hover:underline">{COMPANY_PROFILE.email}</a></li>
+              <li>📧 E-mail: <a href={`mailto:${COMPANY_PROFILE.email}`} className="text-pink-700 underline underline-offset-2 hover:text-pink-800">{COMPANY_PROFILE.email}</a></li>
               <li>
                 💬 WhatsApp:{' '}
                 <a
                   href={`https://wa.me/${COMPANY_PROFILE.whatsapp.digits}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary hover:underline"
+                  className="text-pink-700 underline underline-offset-2 hover:text-pink-800"
                 >
                   {COMPANY_PROFILE.whatsapp.international}
                 </a>

@@ -67,8 +67,8 @@ const CookiePolicy: React.FC = () => (
             <h2 className="text-xl font-semibold text-foreground mb-3">Cookies de terceiros</h2>
             <p>Alguns serviços que utilizamos podem definir seus próprios cookies:</p>
             <ul className="list-disc pl-6 space-y-2 mt-2">
-              <li><strong>Google Firebase</strong> — <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Política de Privacidade do Google</a></li>
-              <li><strong>YouTube</strong> (vídeos incorporados no Vlog) — <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Política do YouTube</a></li>
+              <li><strong>Google Firebase</strong> — <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-pink-700 underline underline-offset-2 hover:text-pink-800">Política de Privacidade do Google</a></li>
+              <li><strong>YouTube</strong> (vídeos incorporados no Vlog) — <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-pink-700 underline underline-offset-2 hover:text-pink-800">Política do YouTube</a></li>
             </ul>
           </section>
 
@@ -76,7 +76,7 @@ const CookiePolicy: React.FC = () => (
             <h2 className="text-xl font-semibold text-foreground mb-3">Contato</h2>
             <p>Para dúvidas sobre cookies e privacidade:</p>
             <ul className="list-none mt-2 space-y-1">
-              <li>📧 <a href={`mailto:${COMPANY_PROFILE.email}`} className="text-primary hover:underline">{COMPANY_PROFILE.email}</a></li>
+              <li>📧 <a href={`mailto:${COMPANY_PROFILE.email}`} className="text-pink-700 underline underline-offset-2 hover:text-pink-800">{COMPANY_PROFILE.email}</a></li>
               <li>💬 WhatsApp: {COMPANY_PROFILE.whatsapp.international}</li>
               <li>📍 {COMPANY_PROFILE.fulfillmentOrigin.shortPt} 🇯🇵</li>
             </ul>

@@ -322,7 +322,7 @@ const ProductDetail: React.FC = () => {
 
               <div>
                 <div className="mb-4">
-                  <span className="inline-block px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide bg-primary/20 text-primary">
+                  <span className="inline-block px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide bg-primary/20 text-pink-800">
                     {t(`product.category.${['cosmeticos','acessorios','doces','papelaria','eletronicos','masculino','vestuario','higiene'].includes(product.category || '') ? product.category : 'importado'}`)}
                   </span>
                 </div>

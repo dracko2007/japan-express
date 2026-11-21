@@ -80,14 +80,14 @@ const ReturnPolicy: React.FC = () => (
               dos nossos canais oficiais informando o número do pedido, nome completo e o motivo da solicitação:
             </p>
             <ul className="list-none mt-3 space-y-1">
-              <li>📧 E-mail: <a href={`mailto:${COMPANY_PROFILE.email}`} className="text-primary hover:underline">{COMPANY_PROFILE.email}</a></li>
+              <li>📧 E-mail: <a href={`mailto:${COMPANY_PROFILE.email}`} className="text-pink-700 underline underline-offset-2 hover:text-pink-800">{COMPANY_PROFILE.email}</a></li>
               <li>
                 💬 WhatsApp:{' '}
                 <a
                   href={`https://wa.me/${COMPANY_PROFILE.whatsapp.digits}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary hover:underline"
+                  className="text-pink-700 underline underline-offset-2 hover:text-pink-800"
                 >
                   {COMPANY_PROFILE.whatsapp.international}
                 </a>

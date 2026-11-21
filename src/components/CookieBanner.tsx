@@ -51,7 +51,7 @@ const CookieBanner: React.FC = () => {
 
               <button
                 onClick={() => setExpanded(v => !v)}
-                className="flex items-center gap-1 text-xs text-pink-500 hover:text-pink-600 mt-2 font-medium transition-colors"
+                className="flex items-center gap-1 text-xs text-pink-700 hover:text-pink-800 mt-2 font-medium transition-colors"
               >
                 {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                 {expanded ? t('cookieBanner.hideDetails') : t('cookieBanner.showDetails')}
@@ -80,7 +80,7 @@ const CookieBanner: React.FC = () => {
               <div className="flex flex-col sm:flex-row gap-2 mt-4">
                 <button
                   onClick={accept}
-                  className="flex-1 bg-pink-500 hover:bg-pink-600 active:scale-95 text-white font-bold text-sm py-2.5 px-5 rounded-xl transition duration-200 shadow-sm"
+                  className="flex-1 bg-pink-600 hover:bg-pink-700 active:scale-95 text-white font-bold text-sm py-2.5 px-5 rounded-xl transition duration-200 shadow-sm"
                 >
                   {t('cookieBanner.acceptAll')}
                 </button>

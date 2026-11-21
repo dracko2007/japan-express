@@ -63,7 +63,7 @@ const ProductTrustBadges: React.FC<ProductTrustBadgesProps> = ({ productName, cl
                 <Icon className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <h4 className="text-xs font-bold text-foreground leading-snug">{b.title}</h4>
+                <h4 aria-level={2} className="text-xs font-bold text-foreground leading-snug">{b.title}</h4>
                 <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">{b.desc}</p>
               </div>
             </div>

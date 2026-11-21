@@ -285,8 +285,8 @@ const HeaderPro: React.FC = () => {
               aria-haspopup="dialog"
             >
               <Search className="h-4 w-4 text-pink-500 transition-transform group-hover:scale-110" aria-hidden />
-              <span className="flex-1 truncate">{t('navPro.searchPlaceholder')}</span>
-              <kbd className="hidden rounded-md border border-pink-100 bg-pink-50 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-pink-600 lg:inline">⌘K</kbd>
+              <span className="flex-1 truncate text-slate-500">{t('navPro.searchPlaceholder')}</span>
+              <kbd className="hidden rounded-md border border-pink-100 bg-pink-50 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-pink-700 lg:inline">⌘K</kbd>
             </button>
 
             <div className="flex items-center gap-1 sm:gap-2">
