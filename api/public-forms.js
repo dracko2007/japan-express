@@ -38,7 +38,25 @@ const CANONICAL_PAGE_PATTERNS = [
   /^\/sobre$/,
   /^\/vlog$/,
   /^\/admin$/,
+  // Páginas públicas que o painel de visitantes nunca contou: o servidor devolvia 400 para elas.
+  /^\/afiliado$/,
+  /^\/empresas$/,
+  /^\/promocao$/,
+  /^\/faca-seu-pedido$/,
+  /^\/rastrear$/,
+  /^\/favoritos$/,
+  /^\/sorteio$/,
+  /^\/privacidade$/,
+  /^\/termos$/,
+  /^\/cookies$/,
+  /^\/devolucao$/,
+  /^\/return-policy$/,
 ];
+
+/** Só caminhos conhecidos da loja entram na estatística (impede encher o banco com caminhos inventados). */
+export function isTrackablePage(slug) {
+  return typeof slug === 'string' && slug.startsWith('/') && !slug.includes('\\') && CANONICAL_PAGE_PATTERNS.some((pattern) => pattern.test(slug));
+}
 
 function optionalEmail(value) {
   return value ? normalizeEmail(value) : '';
@@ -234,9 +252,7 @@ function parseEvent(body) {
 
   if (type === 'page') {
     const slug = requiredText(body.slug, { max: 160 });
-    if (!slug.startsWith('/') || slug.includes('\\') || !CANONICAL_PAGE_PATTERNS.some((pattern) => pattern.test(slug))) {
-      throw new HttpError(400, 'invalid_request');
-    }
+    if (!isTrackablePage(slug)) throw new HttpError(400, 'invalid_request');
     return { type, slug, label: requiredText(body.label, { max: 160 }) };
   }
   if (type === 'product') {
